@@ -8,16 +8,27 @@
 
 #include <iostream>
 #include <vector>
+#include <cmath>
 #include "opencv2/opencv.hpp"
 
 #define NUM_PLANES 3
 #define EPSILON_D 0.4
 
+#define N_THETA 10
+#define DELTA_Z 0.25
+
+typedef struct{
+    float x;
+    float y;
+    float z;
+    float theta;
+}Direction;
+
 using namespace std;
 
-void readNextInput(int &curFileNum, cv::Mat &mat);
+void readNextInput(int curFileNum, cv::Mat &mat);
 
-void readNextInput(int &curFileNum, cv::Mat &mat){
+void readNextInput(int curFileNum, cv::Mat &mat){
     curFileNum += 1;
     char curFileName[5];
     sprintf(curFileName, "%04d", curFileNum);
@@ -68,15 +79,65 @@ void calculFx(cv::Mat &mat, cv::Mat &matFx){
     }
 }
 
+float calculJ();
+float calculJ(){
+    return 0;
+}
+
+void calculVoxelDirection(cv::Mat &matFx, cv::Mat &matDir);
+void calculVoxelDirection(cv::Mat &matFx, cv::Mat &matDir){
+    int rows = matFx.rows;
+    int cols = matFx.cols;
+    //f(x)
+    for(int i=0; i<cols; i++){
+        for(int j=0; j<rows; j++){
+            if(matFx.at<int>(i,j) == 0){
+                float maxJ = 0;
+                float tempJ = calculJ();
+            }
+        }
+    }
+}
+
+
+void calculSetOfDirections(vector<Direction> &setOfDirections);
+void calculSetOfDirections(vector<Direction> &setOfDirections){
+    
+    float dividedTheta = 2 * M_PI / N_THETA;
+    for(float z=-1; z<=1; z+=DELTA_Z){
+        for(int i_theta=0; i_theta <=N_THETA; i_theta += 1){
+            float theta = i_theta * dividedTheta;
+            float x = (sqrt( 1 - pow(z, 2.0) )) * cos(theta);
+            float y = (sqrt( 1 - pow(z, 2.0) )) * sin(theta);
+            Direction tempDir = {x, y, z};
+            setOfDirections.push_back(tempDir);
+        }
+    }
+}
+
+void showAllDirections(vector<Direction> &setOfDirections){
+    for(int i= 0; i<(int)setOfDirections.size(); i++){
+        Direction t = setOfDirections[i];
+        cout << "x: "<< t.x << "  y: "<< t.y << "  z: "<< t.z << endl;
+    }
+}
+
 int main(int argc, const char * argv[]){
     string windowName = "Hello OpenCV";
-    cv::Mat mat, matFx;
-    vector<cv::Mat> mat3d;
-    vector<cv::Mat> mat3dFx;
-    cout << "Hello, OpenCV!" << endl;
+    cv::Mat mat, matFx, matDir;
     
-    int curFileNum = 0;
-    while(curFileNum < NUM_PLANES){
+    vector<cv::Mat> mat3d, mat3dFx, mat3dDir;
+    vector<Direction> setOfDirections;
+    
+    
+    cout << "Hello, OpenCV!" << endl;
+
+    
+    calculSetOfDirections(setOfDirections);
+    showAllDirections(setOfDirections);
+    
+    
+    for(int curFileNum = 0; curFileNum < NUM_PLANES; curFileNum++){
         //read input image
         readNextInput(curFileNum, mat);
         
@@ -88,6 +149,12 @@ int main(int argc, const char * argv[]){
         matFx = cv::Mat(mat.rows,mat.cols, CV_32FC1, float(0));
         calculFx(mat, matFx);
         mat3dFx.push_back(matFx);
+        
+        //set directions
+        //matDir = cv::Mat(mat.rows, mat.cols, CV_8UC3, cv::Scalar(0, 0, 0));
+        //calculDirections(matFx, matDir);
+        //mat3dDir.push_back(matDir);
+        
         
         // show image in cv window
         // input: original, mat: f(x)
