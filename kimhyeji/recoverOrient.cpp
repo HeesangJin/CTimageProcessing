@@ -7,15 +7,13 @@
 #include <vector>
 #include <cmath>
 #include <omp.h>
-///////////////////////////// row, col check
-#define ROW 1010//1010
-#define COL 988//988
-#define IMG_NUM 24//990
+#define ROW 250
+#define COL 250 //988
+#define IMG_NUM 90
 
 using namespace cv;
 using namespace std;
 
-typedef vector< vector< vector <vector<float>>>> save4D;
 typedef pair<int, pair<int, int>> vec3D;
 typedef pair<float, pair<float, float>> direction;
 typedef vector < direction > directionSet;
@@ -45,13 +43,14 @@ void testThreshold(const Mat testImg, int from, int to) {
 open image files and store to 3D volume
 */
 void makeVolume(vector<Mat> &v) {
+#pragma omp parallel for schedule(dynamic,8)
 	for (int i = 1; i <= IMG_NUM; i++) {
 		Mat img;
 		string image = fileLocate + format("%04d.tiff", i);
 		img = imread(image, CV_LOAD_IMAGE_GRAYSCALE);
-		normalize(img, img, 0.0, 1.0, CV_MINMAX, CV_32F);
-		threshold(img, img, 0.4, 1.0, THRESH_BINARY_INV);
-		img.convertTo(img, CV_8U, 255, 0);
+		normalize(img, img, 0.0, 1, CV_MINMAX, CV_32F);
+		threshold(img, img, 0.4, 1, THRESH_BINARY_INV);
+		img.convertTo(img, CV_8U, 1,0);
 		v[i - 1] = img;
 		img.release();
 	}
@@ -61,18 +60,17 @@ void makeVolume(vector<Mat> &v) {
 make set of direction vectors
 */
 void makedirectionSet(directionSet &v) {
-	float M_PI2 = M_PI_2 * 2;
-	float intervalTheta = M_PI_2 / (dirNum-1);
-	float intervalZ = 2.0 / (dirNum -1);
+	float M_PI2 = M_PI * 2;
+	float intervalTheta = M_PI2 / (dirNum - 1);
+	float intervalZ = 2.0 / (dirNum - 1);
 	int count = 0;
 	for (float z = -1.0; z <= 1.0; z += intervalZ) {
-		for (float theta = 0; theta <= M_PI_2; theta += intervalTheta) {
+		for (float theta = 0; theta <= M_PI2; theta += intervalTheta){
 			float x = sqrt(1.0 - pow(z, 2)) * cos(theta);
 			float y = sqrt(1.0 - pow(z, 2)) * sin(theta);
-			v[count++] = { z,{ x,y } };
+			v[count++] = {z,{ x,y }};
 		}
 	}
-
 }
 
 /*
@@ -93,63 +91,33 @@ float getDistance(const direction &direct, const vec3D &x) {
 }
 
 /*
-for memory problem, it doesn't work.
-*/
-void saveDistance(save4D &saveData, const directionSet &d) {
-	int dirNum_squ = dirNum * dirNum;
-	for (int dir = 0; dir < dirNum_squ; dir++) {
-
-		for (int p_z = 0; p_z <= h; p_z++) {
-			if (p_z >= IMG_NUM) continue;
-			for (int p_x = 0; p_x <= h; p_x++) {
-				if (p_x >= ROW) continue;
-				for (int p_y = 0; p_y <= h; p_y++) {
-					if (p_y >= COL) continue;
-
-
-					float dist = getDistance(d[dir], { p_z,{ p_x,p_y } });
-					float pow_dist = pow(dist, 2);
-					float q_func = -2 * exp(-s * pow_dist) + exp(-t * pow_dist);
-					saveData[dir][p_z][p_x][p_y] = q_func;
-				}
-			}
-		}
-	}
-}
-
-/*
 get Maximum convolution value
 */
 direction getMaxConvolution(const directionSet &d, const vector<Mat> &volume, const vec3D &v) {
 	int x = v.second.first;
 	int y = v.second.second;
 	int z = v.first;
-	
-	float maxValue = -987654321;
+	float maxValue = -99999;
 	direction result;
 
 #pragma omp parallel for schedule(dynamic,8)
-	for (int i = 0; i < IMG_NUM; i++) {
-		
+	for (int i = 0; i < 100; i++) {		
 		float j = 0;
-
 		for (int p_z = 0; p_z <= h; p_z++) {
-			if (p_z >= IMG_NUM) continue;
+			if (z + p_z > IMG_NUM) continue;
 			for (int p_x = 0; p_x <= h; p_x++) {
-				if (p_x >= ROW) continue;
+				if (x + p_x > ROW) continue;
 				for (int p_y = 0; p_y <= h; p_y++) {
-					if (p_y >= COL) continue;
-
-					/*
-					float q_func = dist[i][p_z][p_x][p_y];
-					*/
-					float dist = getDistance(d[i], { p_z,{p_x,p_y} });
-					float q_func = -2 * exp(-s * pow(dist, 2)) + exp(-t * pow(dist, 2));
+					if (y + p_y > COL) continue;
 					
-					j += q_func * volume[z + p_z].at<uchar>(x + p_x, y + p_y);
+					float dist = getDistance(d[i], { p_z,{ p_x,p_y } });
+					if (i > 99) cout << p_x << ' ' << p_y << ' ' << p_z << endl;
+
+					float q_func = -2 * exp(-s * pow(dist, 2)) + exp(-t * pow(dist, 2));
+					j += q_func;
+					
 				}
-			}
-		
+			}	
 		}
 		if (maxValue < j) {
 			maxValue = j;
@@ -162,29 +130,29 @@ direction getMaxConvolution(const directionSet &d, const vector<Mat> &volume, co
 
 
 int main(int argc, char **argv) {
-	
+
 	vector<Mat> volumeData(IMG_NUM);
 	makeVolume(volumeData);
-	
+
 	/*
 	memory problem.
 
 	ifstream read;
 	string volumeFile = "volumeData.xml";
-	read.open(volumeFile); 
+	read.open(volumeFile);
 	if (read) {
-		FileStorage fs_r(volumeFile, FileStorage::READ);
-		fs_r["volumeData"] >> volumeData;
-		cout << "We open it" << endl;
+	FileStorage fs_r(volumeFile, FileStorage::READ);
+	fs_r["volumeData"] >> volumeData;
+	cout << "We open it" << endl;
 	}
 	else {
-		FileStorage fs_w(volumeFile, FileStorage::WRITE);
-		makeVolume(volumeData);
-		fs_w << "volumeData" << volumeData;
-		fs_w.release();
+	FileStorage fs_w(volumeFile, FileStorage::WRITE);
+	makeVolume(volumeData);
+	fs_w << "volumeData" << volumeData;
+	fs_w.release();
 	}
 	*/
-	
+
 	cout << endl << "make volume" << endl;
 
 	directionSet dicVec(dirNum * dirNum);
@@ -197,9 +165,9 @@ int main(int argc, char **argv) {
 	recover the orientation field
 	*/
 
-	vector< Mat> orientData(IMG_NUM, Mat (ROW,COL, CV_8UC1));
-	
+	//vector< Mat> orientData(IMG_NUM, Mat (ROW,COL, CV_8UC1));
 	for (int z = 0; z < IMG_NUM; z++) {
+
 		cout << z << endl;
 		Mat image_dir(ROW, COL, CV_32FC3);
 		Mat image_den(ROW, COL, CV_32FC1);
@@ -208,26 +176,31 @@ int main(int argc, char **argv) {
 		for (int x = 0; x < ROW; x++) {
 			cout << "x" << x << endl;
 			for (int y = 0; y < COL; y++) {
-	
-				if (volumeData[z].at<uchar>(x, y)) {
-					image_dir.at<Vec3f>(x, y)[0] = 0;
-					image_dir.at<Vec3f>(x, y)[1] = 0;
-					image_dir.at<Vec3f>(x, y)[2] = 0;
+				if (int(volumeData[z].at<uchar>(x, y))) {
+					image_dir.at<Vec3f>(x, y)[0] = 0.0;
+					image_dir.at<Vec3f>(x, y)[1] = 0.0;
+					image_dir.at<Vec3f>(x, y)[2] = 0.0;
+					image_den.at<float>(x, y) = 0;
 				}
 				else {
+					direction result = getMaxConvolution(dicVec, volumeData, { z,{ x,y } });
+					image_dir.at<Vec3f>(x, y)[0] = abs(result.second.first);
+					image_dir.at<Vec3f>(x, y)[1] = abs(result.second.second);
+					image_dir.at<Vec3f>(x, y)[2] = abs(result.first);
+					float density =  sqrt(pow(result.second.first, 2) + pow(result.second.second, 2) + pow(result.first, 2));
+					image_den.at<float>(x, y) = density;
+					
 
-					direction result = getMaxConvolution(dicVec, volumeData, {z,{x,y}});
-					image_dir.at<Vec3f>(x, y)[0] = result.second.first;
-					image_dir.at<Vec3f>(x, y)[1] = result.second.second;
-					image_dir.at<Vec3f>(x, y)[2] = result.first;
-					image_den.at<float>(x, y) = sqrt(pow(result.second.first, 2) + pow(result.second.second, 2) + pow(result.first, 2));
 				}
 			}
 		}
 		imshow("dis", image_dir);
 		imwrite("direction" + format("%d.jpg", z), image_dir);
 		imwrite("density" + format("%d.jpg", z), image_den);
+		image_dir.release();
+		image_den.release();
 	}
+		
 }
 
 
