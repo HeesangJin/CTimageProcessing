@@ -17,8 +17,8 @@
 #define EPSILON_D 0.6
 
 #define N_THETA 10
-#define DELTA_Z 0.1
-#define LENGTH_L 10
+#define N_Z 20
+#define LENGTH_L 6
 
 #define VALUE_S 3
 #define VALUE_T 4
@@ -216,7 +216,21 @@ float calculJ(Point &curVoxel, Direction &d, int dir_i){
     //cout << "return J is" << J << endl;
     return J;
 }
-            
+
+void showJvalueDot(int x, int y, int z, int dir_i, vector<Direction> &setOfDirections);
+void showJvalueDot(int x, int y, int z, int dir_i, vector<Direction> &setOfDirections){
+    Point voxel = {x, y, z};
+    float J = calculJ(voxel, setOfDirections[dir_i], dir_i);
+    cout << "x: " << x << ", y: " << y << ", z: " << z << ", dir_i: " << dir_i << ", J: " << J << endl;
+}
+
+void showAllJvaluesDot(int x, int y, int z, vector<Direction> &setOfDirections);
+void showAllJvaluesDot(int x, int y, int z, vector<Direction> &setOfDirections){
+    for(int i=0; i<(int)setOfDirections.size(); i++){
+        showJvalueDot(x, y, z, i, setOfDirections);
+    }
+}
+
             
 void calculVoxelDirection(Point &curPoint, cv::Mat &matFx, cv::Mat &matDir, vector<Direction> &setOfDirections);
 void calculVoxelDirection(Point &curPoint, cv::Mat &matFx, cv::Mat &matDir, vector<Direction> &setOfDirections){
@@ -234,7 +248,7 @@ void calculVoxelDirection(Point &curPoint, cv::Mat &matFx, cv::Mat &matDir, vect
                 
                 // Calculate Direction(x)
                 // find maxJ
-                float maxJ = (float)INT_MIN;
+                float maxJ = -9999;
                 
                 //for each d in setOfDirections
                 for(int dir_i=0; dir_i<(int)setOfDirections.size(); dir_i++){
@@ -242,7 +256,7 @@ void calculVoxelDirection(Point &curPoint, cv::Mat &matFx, cv::Mat &matDir, vect
                     
                     //cout << "i: "<< i << ", y: " << j << ", dir_i: "<< dir_i << "dir: (" << d.x << ", " << d.y << ", " << d.z << ")" <<endl;
                     //Calculate J(x,d)
-                    float tempJ = calculJ(curPoint, d, dir_i);
+                    float tempJ = abs(calculJ(curPoint, d, dir_i));
                     //cout << "maxJ: " << maxJ << ", tempJ: " << tempJ << endl;
                     if(tempJ > maxJ){
                         maxJ = tempJ;
@@ -273,7 +287,7 @@ void calculVoxelDirection(Point &curPoint, cv::Mat &matFx, cv::Mat &matDir, vect
                 matDir.at<cv::Vec3b>(i,j)[0] = 0;
             }
         }
-        cout << "progressing: " << i << "/" << cols << endl;
+        cout << "processing: " << i << "/" << cols << endl;
     }
 }
 
@@ -298,7 +312,11 @@ void calculSetOfDirections(vector<Direction> &setOfDirections);
 void calculSetOfDirections(vector<Direction> &setOfDirections){
     
     float dividedTheta = 2 * M_PI / N_THETA;
-    for(float z=-1; z<=1; z+=DELTA_Z){
+    float dividedZ = 2.0 / N_Z;
+    
+    for(int i_z=0; i_z<=N_Z; i_z+= 1){
+        float z = -1 + i_z * dividedZ;
+        cout << dividedZ << endl;
         for(int i_theta=0; i_theta <=N_THETA; i_theta += 1){
             float theta = i_theta * dividedTheta;
             float x = (sqrt( 1 - z * z )) * cos(theta);
@@ -313,7 +331,7 @@ void calculSetOfDirections(vector<Direction> &setOfDirections){
 void showAllDirections(vector<Direction> &setOfDirections){
     for(int i= 0; i<(int)setOfDirections.size(); i++){
         Direction t = setOfDirections[i];
-        cout << "x: "<< t.x << "  y: "<< t.y << "  z: "<< t.z << endl;
+        cout << "[" << i << "]" << "x: "<< t.x << "  y: "<< t.y << "  z: "<< t.z << endl;
     }
 }
 
@@ -335,11 +353,101 @@ void showAllFx(vector<cv::Mat> &mat){
 }
 
 
+void drawRowLine(cv::Mat &mat, int lineNumber);
+void drawColLine(cv::Mat &mat, int lineNumber);
+
+void drawColLine(cv::Mat &mat, int lineNumber){
+    int cols = mat.cols;
+    
+    for(int i=0; i<cols; i++){
+        mat.at<cv::Vec3b>(i,lineNumber)[0] = 0; //B
+        mat.at<cv::Vec3b>(i,lineNumber)[1] = 200; //R
+        mat.at<cv::Vec3b>(i,lineNumber)[2] = 200; //G
+    }
+}
+
+void drawRowLine(cv::Mat &mat, int lineNumber){
+    int rows = mat.rows;
+    
+    for(int i=0; i<rows; i++){
+        mat.at<cv::Vec3b>(lineNumber, i )[0] = 0; //B
+        mat.at<cv::Vec3b>(lineNumber, i )[1] = 200; //R
+        mat.at<cv::Vec3b>(lineNumber, i )[2] = 200; //G
+    }
+}
+void drawSquare(cv::Mat &mat, int botRow, int botCol, int topRow, int topCol);
+void drawSquare(cv::Mat &mat, int botRow, int botCol, int topRow, int topCol){
+    for(int i=botCol; i<=topCol; i++){
+        for(int j=botRow; j<=topRow; j++){
+            mat.at<cv::Vec3b>(i, j)[0] = 0; //B
+            mat.at<cv::Vec3b>(i, j)[1] = 200; //R
+            mat.at<cv::Vec3b>(i, j)[2] = 200; //G
+        }
+    }
+    
+}
+
+void drawDot(cv::Mat &mat, int row, int col);
+void drawDot(cv::Mat &mat, int row, int col){
+    drawSquare(mat, row, col, row, col);
+}
+
+void makeDensityFromDir(cv::Mat &matDir, cv::Mat &matDensity);
+void makeDensityFromDir(cv::Mat &matDir, cv::Mat &matDensity){
+    
+    int rows = matDir.rows;
+    int cols = matDir.cols;
+    
+    for(int i=0; i<cols; i++){
+        for(int j=0; j<rows; j++){
+            float density = 0;
+            float color_b = (matDir.at<cv::Vec3b>(i,j)[0])/255;
+            float color_r = (matDir.at<cv::Vec3b>(i,j)[1])/255;
+            float color_g = (matDir.at<cv::Vec3b>(i,j)[2])/255;
+            
+            density += (color_b * color_b);
+            density += (color_r * color_r);
+            density += (color_g * color_g);
+            density = sqrt(density);
+            
+            matDensity.at<float>(i,j) = density;
+        }
+    }
+
+    
+}
+
+void showDotRGBvalue(cv::Mat &mat, int row, int col);
+void showDotRGBvalue(cv::Mat &mat, int row, int col){
+    int i = col;
+    int j = row;
+    cout << "(" << row << ", " << col << ")";
+    cout << " B: "<< (int)mat.at<cv::Vec3b>(i,j)[0] << ",R: "<< (int)mat.at<cv::Vec3b>(i,j)[1] << ",G: "<< (int)mat.at<cv::Vec3b>(i,j)[2] << endl;
+}
+
+void showSquareRGBvalue(cv::Mat &mat, int botRow, int botCol, int topRow, int topCol);
+void showSquareRGBvalue(cv::Mat &mat, int botRow, int botCol, int topRow, int topCol){
+    for(int i=botCol; i<topCol; i++){
+        for(int j=botRow; j<topRow; j++){
+            showDotRGBvalue(mat, j, i);
+        }
+    }
+}
+
+void showDotSingleValue(cv::Mat &mat, int row, int col);
+void showDotSingleValue(cv::Mat &mat, int row, int col){
+    int i = col;
+    int j = row;
+    cout << "(" << row << ", " << col << ")";
+    cout << " Value: " << mat.at<float>(i,j) << endl;
+}
+
 int main(int argc, const char * argv[]){
     clock_t begin = clock();
     
     string windowName = "Hello OpenCV";
-    cv::Mat mat, matFx, matDir;
+    cv::Mat mat, matFx, matDir, matDensity;
+    
     
     vector<cv::Mat> mat3d, mat3dDir;
     vector<Direction> setOfDirections;
@@ -351,7 +459,7 @@ int main(int argc, const char * argv[]){
     calculSetOfDirections(setOfDirections);
     
     //debug
-    //showAllDirections(setOfDirections);
+    showAllDirections(setOfDirections);
     
     
     for(int curFileNum = 0; curFileNum < NUM_PLANES; curFileNum++){
@@ -381,50 +489,65 @@ int main(int argc, const char * argv[]){
 
     calculAllQs(setOfDirections);
     
-//    for(int curFileNum = 0; curFileNum < NUM_PLANES; curFileNum++){
-//        //set directions
-//        mat = mat3d[curFileNum];
-//        matFx = mat3dFx[curFileNum];
-//        cout << "curFileNum: " << curFileNum << endl;
-//        Point curPoint = {0, 0, curFileNum};
-//        matDir = cv::Mat(mat.rows, mat.cols, CV_8UC3, cv::Scalar(0, 0, 0));
-//        calculVoxelDirection(curPoint, matFx, matDir, setOfDirections);
-//        //mat3dDir.push_back(matDir);
-//        
-//        //test - fix.. blue background...
-//        //debugSetToDirFromFx(matFx, matDir);
-//                            
-//        // show image in cv window
-//        // input: original, mat: f(x)
-//        cv::imshow(windowName, matDir);
-//        
-//        // wait for keypress to exit
-//        cv::waitKey(0);
-//    }
     
     int curFileNum = 100;
+//    for(int curFileNum = 0; curFileNum < NUM_PLANES; curFileNum++){
+
     mat = mat3d[curFileNum];
     matFx = mat3dFx[curFileNum];
     cout << "curFileNum: " << curFileNum << endl;
     Point curPoint = {0, 0, curFileNum};
     matDir = cv::Mat(mat.rows, mat.cols, CV_8UC3, cv::Scalar(0, 0, 0));
     calculVoxelDirection(curPoint, matFx, matDir, setOfDirections);
-    //mat3dDir.push_back(matDir);
+    mat3dDir.push_back(matDir);
 
-    //test - fix.. blue background...
-    //debugSetToDirFromFx(matFx, matDir);
-
+    //matDensity = cv::Mat(mat.rows,mat.cols, CV_32F, float(0));
+    //makeDensityFromDir(matDir, matDensity);
+    
+    /* debug - draw lines in yellow */
+    //drawRowLine(matDir, 100);
+    drawColLine(matDir, 330); //left
+    drawColLine(matDir, 370); //right
+    drawRowLine(matDir, 585); //top
+    drawRowLine(matDir, 625); //bottom
+    //top-left is (0,0)
+    
+    drawDot(matDir, 350, 600);
+    drawDot(matDir, 351, 600);
+    drawDot(matDir, 352, 600);
+    drawDot(matDir, 353, 600);
+    drawDot(matDir, 354, 600);
+    drawDot(matDir, 355, 600);
+    drawDot(matDir, 356, 600);
+    drawDot(matDir, 357, 600);
+    drawDot(matDir, 358, 600);
+    drawDot(matDir, 359, 600);
+    drawDot(matDir, 360, 600);
+    
+    
+    //debug
+    showAllJvaluesDot(350, 600, curFileNum, setOfDirections);
+    
+    //drawColLine(matDir, 400);
+    //drawSquare(matDir, 320, 580, 380, 630); // bottom (x,y) and top (x,y)
+    showSquareRGBvalue(matDir, 330, 585, 370, 625); // bottom (x,y) and top (x,y)
+    
+    //showDotRGBvalue(matDir, 350, 605); // not showDotRGBvalue(matDir, 605, 350);
+    
+    
+    
     clock_t end = clock();
     double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
     cout << "Processing time: " << time_spent << "s" << endl;
     
-    
-    // show image in cv window
-    // input: original, mat: f(x)
     cv::imshow(windowName, matDir);
-
-    // wait for keypress to exit
     cv::waitKey(0);
+    
+    //cv::imshow(windowName, matDensity);
+    //cv::waitKey(0);
+    
+//    }
+    
     return 0;
 }
 
