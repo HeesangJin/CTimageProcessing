@@ -1,13 +1,8 @@
-#include "opencv2/objdetect.hpp"
-#include "opencv2/videoio.hpp"
-#include "opencv2/highgui.hpp"
-#include "opencv2/imgproc.hpp"
-#include "opencv2\opencv.hpp"
+#include "opencv2/opencv.hpp"
 
 #include <iostream>
-#include <stdio.h>
-#include <math.h>
-#include <omp.h> 
+#include <cstdio>
+#include <cmath>
 #include <ctime>
 
 using namespace std;
@@ -74,8 +69,6 @@ int main()
 
 	// cal_binary_volume(v_imgs[0]); // test
 
-	omp_set_num_threads(4);
-	#pragma omp parallel for
 
 	
 	for (int y_idx = 500; y_idx < 600; ++y_idx) { // height
@@ -139,7 +132,7 @@ int main()
 			}
 		}
 	}
-	imshow("À¸¾Æ¾Ç", d_volume);
+	imshow("debug4", d_volume);
 	
 
 	
@@ -178,7 +171,7 @@ int cal_binary_volume(Mat& mt_img) {
 
 	Mat binary_volume = mt_img;
 	double bin = 0;
-	cout << "¹¹¾ß" << endl;
+	cout << "debug1" << endl;
 	for (int y_idx = 0; y_idx < mt_img.rows; ++y_idx) {
 		for (int x_idx = 0; x_idx < mt_img.cols; ++x_idx) {
 			bin = mt_img.at<uchar>(y_idx, x_idx);
@@ -187,7 +180,7 @@ int cal_binary_volume(Mat& mt_img) {
 			else binary_volume.at<uchar>(y_idx, x_idx) = 255;
 		}
 	}
-	imshow("Å×½ºÆ®",binary_volume);
+	imshow("debug2",binary_volume);
 	return 1;
 }
 
@@ -225,7 +218,7 @@ int read_input(int file_num, vector<Mat>& v_img_data) {
 		string cur_file_string(cur_file_name);
 
 		// get next readed filename
-		string path = "C:\\UCI\\Pramook_black_velvet_3.03um_80kV_TIFF\\Pramook_black_velvet_3.03um_80kV_TIFF\\";
+		string path = "./";
 
 		string filename = path + cur_file_string + ".tiff";
 		//cout << "Opening image = " << filename << endl;
