@@ -16,7 +16,7 @@
 
 #define NUM_PLANES 300
 #define EPSILON_D 0.6
-#define EPSILON_J -1
+#define EPSILON_J -5
 
 #define N_THETA 10
 #define N_Z 20
@@ -50,6 +50,7 @@ int num_d;
 vector<vector<vector<vector<float> > > > qValues;
 
 
+string type2str(int type);
 void readNextInput(int curFileNum, cv::Mat &mat);
 void readNextInput(int curFileNum, cv::Mat &mat){
     curFileNum += 1;
@@ -64,14 +65,40 @@ void readNextInput(int curFileNum, cv::Mat &mat){
     cv::Mat input;
     
     //read image
-    input = cv::imread(filename, 0);
+    //input = cv::imread(filename, cv::IMREAD_UNCHANGED);
+    input = cv::imread(filename, cv::IMREAD_UNCHANGED);
     
+    //cv::cvtColor(mat, mat, CV_BGRA2GRAY);
     //convert uchar to float
-    input.convertTo(mat, CV_32F);
+    input.convertTo(mat, CV_8U, 1.0/255.0);
     
     cout << "Image dimensions = " << mat.size() << endl;
     //cout << mat.rows << " ," << mat.cols << endl;
     
+}
+
+
+string type2str(int type) {
+    string r;
+    
+    uchar depth = type & CV_MAT_DEPTH_MASK;
+    uchar chans = 1 + (type >> CV_CN_SHIFT);
+    
+    switch ( depth ) {
+        case CV_8U:  r = "8U"; break;
+        case CV_8S:  r = "8S"; break;
+        case CV_16U: r = "16U"; break;
+        case CV_16S: r = "16S"; break;
+        case CV_32S: r = "32S"; break;
+        case CV_32F: r = "32F"; break;
+        case CV_64F: r = "64F"; break;
+        default:     r = "User"; break;
+    }
+    
+    r += "C";
+    r += (chans+'0');
+    
+    return r;
 }
 
 void normalizeMat2d(cv::Mat &mat);
@@ -485,23 +512,23 @@ int main(int argc, const char * argv[]){
         readNextInput(curFileNum, mat);
         
         //make mat2d to normalization
-        normalizeMat2d(mat);
-        mat3d.push_back(mat);
-        //ok
-        
-        //caculate f(x)
-        matFx = cv::Mat(mat.rows,mat.cols, CV_32F, float(0));
-        calculFx(mat, matFx);
-        mat3dFx.push_back(matFx);
-        //ok
-        
-        //DEBUG
-        //        cv::Mat matTest;
-        //        matTest = cv::Mat(matFx.rows, matFx.cols, CV_8UC3, cv::Scalar(0, 0, 0));
-        //        debugToRgb(matFx, matTest);
-        //
-        //cv::imshow(windowName, matFx);
-        //cv::waitKey(0);
+//        normalizeMat2d(mat);
+//        mat3d.push_back(mat);
+//        //ok
+//        
+//        //caculate f(x)
+//        matFx = cv::Mat(mat.rows,mat.cols, CV_32F, float(0));
+//        calculFx(mat, matFx);
+//        mat3dFx.push_back(matFx);
+//        //ok
+//        
+//        //DEBUG
+//        //        cv::Mat matTest;
+//        //        matTest = cv::Mat(matFx.rows, matFx.cols, CV_8UC3, cv::Scalar(0, 0, 0));
+//        //        debugToRgb(matFx, matTest);
+//        //
+        cv::imshow(windowName, mat);
+        cv::waitKey(0);
     }
     //showAllFx(mat3dFx);
     
