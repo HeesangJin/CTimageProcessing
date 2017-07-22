@@ -14,9 +14,9 @@
 
 #include "opencv2/opencv.hpp"
 
-#define NUM_PLANES 300
+#define NUM_PLANES 150
 #define EPSILON_D 0.6
-#define EPSILON_J -5
+#define EPSILON_J -1
 
 #define N_THETA 10
 #define N_Z 20
@@ -65,12 +65,16 @@ void readNextInput(int curFileNum, cv::Mat &mat){
     cv::Mat input;
     
     //read image
-    //input = cv::imread(filename, cv::IMREAD_UNCHANGED);
     input = cv::imread(filename, cv::IMREAD_UNCHANGED);
-    
-    //cv::cvtColor(mat, mat, CV_BGRA2GRAY);
-    //convert uchar to float
     input.convertTo(mat, CV_8U, 1.0/255.0);
+    mat.convertTo(mat, CV_32F, 1.0/255.0);
+    
+//    for(int i=500; i<mat.rows; i++){
+//        for(int j=500; j<mat.cols; j++){
+//            cout << mat.at<float>(i,j) << endl;
+//        }
+//    }
+    
     
     cout << "Image dimensions = " << mat.size() << endl;
     //cout << mat.rows << " ," << mat.cols << endl;
@@ -237,6 +241,7 @@ float calculJ(Point &curVoxel, Direction &d, int dir_i){
                 Point curP = {p_x, p_y, p_z};
                 Point curXsumP = {p_x + curVoxel.x , p_y + curVoxel.y , p_z + curVoxel.z };
                 
+                //cout << curXsumP.x << " " << curXsumP.y << " " << curXsumP.z << endl;
                 // J += f(x+p) * q(d;p)
                 if( isValidPoint(curXsumP) ){
                     //cout << "curXsumP.x: "<< curXsumP.x << ", curXsumP.y: "<< curXsumP.y << ", curXsumP.z: " << curXsumP.z <<endl;
@@ -298,9 +303,9 @@ void calculVoxelDirection(Point &curPoint, cv::Mat &mat, cv::Mat &matFx, cv::Mat
                         //matDir.r/g/b = d.x/d.y/d.z;
                         
                         //cout << "d.x: " << abs(d.x) << "d.y: "<< abs(d.y) << "d.z: "<< abs(d.z) << endl;
-                        int color_b = abs(d.x) * 255;
+                        int color_r = abs(d.x) * 255;
                         int color_g = abs(d.y) * 255;
-                        int color_r = abs(d.z) * 255;
+                        int color_b = abs(d.z) * 255;
                         
                         matDir.at<cv::Vec3b>(i,j)[0] = color_b;
                         matDir.at<cv::Vec3b>(i,j)[1] = color_g;
@@ -511,29 +516,28 @@ int main(int argc, const char * argv[]){
         //read input image
         readNextInput(curFileNum, mat);
         
-        //make mat2d to normalization
-//        normalizeMat2d(mat);
-//        mat3d.push_back(mat);
-//        //ok
-//        
-//        //caculate f(x)
-//        matFx = cv::Mat(mat.rows,mat.cols, CV_32F, float(0));
-//        calculFx(mat, matFx);
-//        mat3dFx.push_back(matFx);
-//        //ok
-//        
-//        //DEBUG
-//        //        cv::Mat matTest;
-//        //        matTest = cv::Mat(matFx.rows, matFx.cols, CV_8UC3, cv::Scalar(0, 0, 0));
-//        //        debugToRgb(matFx, matTest);
-//        //
-        cv::imshow(windowName, mat);
-        cv::waitKey(0);
+        mat3d.push_back(mat);
+        //ok
+        
+        //caculate f(x)
+        matFx = cv::Mat(mat.rows, mat.cols, CV_32F, float(0));
+        calculFx(mat, matFx);
+        mat3dFx.push_back(matFx);
+        //ok
+        
+        //DEBUG
+        //        cv::Mat matTest;
+        //        matTest = cv::Mat(matFx.rows, matFx.cols, CV_8UC3, cv::Scalar(0, 0, 0));
+        //        debugToRgb(matFx, matTest);
+        //
+        //cv::imshow(windowName, mat);
+        //cv::waitKey(0);
     }
     //showAllFx(mat3dFx);
     
     calculAllQs(setOfDirections);
-    
+    ROWS = mat.rows;
+    COLS = mat.cols;
     
     int curFileNum = 100;
     //    for(int curFileNum = 0; curFileNum < NUM_PLANES; curFileNum++){
