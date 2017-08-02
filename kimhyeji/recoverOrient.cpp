@@ -7,73 +7,73 @@
 #include <omp.h>
 #define ROW 1010 //1010
 #define COL 988 //988
-#define IMG_NUM 200 //990
-#define H 13
-#define DIRNUM 10
-#define DIRNUMSQU 100
+#define IMG_NUM 150 //990
+#define H 13 // H + 1
+#define DIRNUM 12
+#define DIRNUMSQU 144
 using namespace cv;
 using namespace std;
 
 typedef vector < Vec3f > directionSet;
 
-int h = 12;
+int h3 = H*H*H;
+int h2 = H*H;
 int s = 3;
 int t = 4;
-int h_half = h / 2;
 
 string fileLocate = "C:\\Users\\kimhyeji\\Desktop\\UCI\\project\\Pramook_black_velvet_3.03um_80kV_TIFF\\";
-
-/*
-test code for deciding threshold
-*/
-void testThreshold(const Mat testImg, int from, int to) {
-	Mat binary_img;
-	for (int i = from; i < to; i++) {
-		threshold(testImg, binary_img, i, 255, THRESH_BINARY);
-		imshow("Display window", binary_img);
-		printf("%d", i);
-		waitKey(0);
-	}
-}
 
 /*
 open image files and store to 3D volume
 */
 void makeVolume(vector<Mat> &v) {
-	#pragma omp parallel for schedule(dynamic,8)
+	//#pragma omp parallel for schedule(dynamic,8)
 	for (int i = 1; i <= IMG_NUM; i++) {
 		Mat img;
 		string image = fileLocate + format("%04d.tiff", i);
-		img = imread(image, CV_LOAD_IMAGE_GRAYSCALE);
-
+		//img = imread(image, CV_LOAD_IMAGE_ANYCOLOR);
+		img = imread(image, CV_LOAD_IMAGE_UNCHANGED);
 		normalize(img, img, 0.0, 1, CV_MINMAX, CV_32F);
 		threshold(img, img, 0.68, 1, THRESH_BINARY_INV);
 		img.convertTo(img, CV_8U, 255, 0);
-		imshow("img", img);
-		waitKey(0);
 		v[i - 1] = img;
 		img.release();
 	}
 }
 
-/*
+//rotate matrix(3*3)  sqrt(2) h (2¤·dptj) s,t °íÄ¡¤Ó¤¡ downsample
+Mat rotationMatrix(float d, float cosTheta) {
+	Mat YR = (Mat_<float>(3, 3) <<
+		cos(d), 0, sin(d),
+		0, 1, 0,
+		-sin(d), 0, cos(d));
+	float sinTheta = 1 - cosTheta*cosTheta;
+	Mat ZR = (Mat_<float>(3, 3) <<
+		cosTheta, -sinTheta, 0,
+		sinTheta, cosTheta, 0,
+		0, 0, 1);
 
+	return YR * ZR;
+}
+
+/*
 make set of direction vectors
 */
-void makedirectionSet(directionSet &v) {
+void makedirectionSet(directionSet &v, vector<Mat> &R) {
 	float M_PI2 = M_PI * 2;
 	float intervalTheta = M_PI2 / (DIRNUM - 1);
 	float intervalZ = 2.0 / (DIRNUM - 1);
+
 	int count = 0;
 	for (float z = -1.0; z <= 1.0; z += intervalZ) {
 		for (float theta = 0; theta <= M_PI2; theta += intervalTheta) {
 			float x = sqrt(1.0 - pow(z, 2)) * cos(theta);
 			float y = sqrt(1.0 - pow(z, 2)) * sin(theta);
+			R[count] = rotationMatrix(theta, z);
 			v[count++] = Vec3f(z, x, y);
 		}
 	}
 }
-
 
 /*
 get distance with direction vector and location p
@@ -87,16 +87,21 @@ float getDistance(const Vec3f &direct, const Vec3f &x) {
 /*
 save q function values
 */
-void saveDistance(float(&saveData)[DIRNUMSQU][H][H][H], const directionSet &d) {
-	for (int dir = 0; dir < DIRNUMSQU; dir++) {
+void saveDistance(float(&saveData)[DIRNUMSQU*H*H*H], const directionSet &d, vector<Mat> &R) {
+	int h_half = H/2;
 
-		for (int p_z = 0; p_z <= h; p_z++) {
-			for (int p_x = 0; p_x <= h; p_x++) {
-				for (int p_y = 0; p_y <= h; p_y++) {
-					float dist = getDistance(d[dir], Vec3f(p_z, p_x, p_y));
+	for (int dir = 0; dir < DIRNUMSQU; dir++) {
+		for (int p_z = 0; p_z < H; p_z++) {
+			for (int p_x = 0; p_x < H; p_x++) {
+				for (int p_y = 0; p_y < H; p_y++) {
+					Mat x_vec = (Mat_<float>(3, 1) <<
+						p_z - h_half, p_x - h_half, p_y - h_half);
+
+					Mat p = R[dir] * x_vec;
+					float dist = getDistance(d[dir], Vec3f(p.at<float>(0,0), p.at<float>(1, 0), p.at<float>(2, 0)));
 					float pow_dist = dist * dist;
 					float q_func = -2 * exp(-s * pow_dist) + exp(-t * pow_dist);
-					saveData[dir][p_z][p_x][p_y] = q_func;
+					saveData[dir*h3 + p_z*h2 + p_x*H + p_y] = q_func;
 				}
 			}
 		}
@@ -106,53 +111,58 @@ void saveDistance(float(&saveData)[DIRNUMSQU][H][H][H], const directionSet &d) {
 /*
 get Maximum convolution value
 */
-Vec3f getMaxConvolution(const directionSet &d, const vector<Mat> &volume, const Vec3i &v, const float(&q)[DIRNUMSQU][H][H][H]) {
+Vec3f getMaxConvolution(const directionSet &d, const vector<Mat> &volume, const Vec3i &v, const float(&q)[DIRNUMSQU * H * H * H], bool density, vector<Mat> &R) {
 	int x = v[1];
 	int y = v[2];
 	int z = v[0];
 	float maxValue = -99999;
+	int h_half = H / 2;
+
 	Vec3f result;
 	for (int i = 0; i < DIRNUMSQU; i++) {
 		float j = 0;
-		for (int p_z = 0; p_z <= h; p_z++) {
+		for (int p_z = 0; p_z < H; p_z++) {
 			if (z + p_z >= IMG_NUM) continue;
-			for (int p_x = 0; p_x <= h; p_x++) {
+			for (int p_x = 0; p_x < H; p_x++) {
 				if (x + p_x >= ROW) continue;
-				for (int p_y = 0; p_y <= h; p_y++) {
+				for (int p_y = 0; p_y < H; p_y++) {
 					if (y + p_y >= COL) continue;
-
-					if (volume[z + p_z].at<uchar>(x + p_x, y + p_y) > 0)
-					{
-						float q_func = q[i][p_z][p_x][p_y];
+					Mat x_vec = (Mat_<float>(3, 1) <<
+						p_z - h_half, p_x - h_half, p_y - h_half);
+					Mat p = R[i] * x_vec;
+					int v_x = int(x + p.at<float>(0, 0) + 0.5);
+					int v_y = int(y + p.at<float>(1, 0) + 0.5);
+					int v_z = int(z + p.at<float>(2, 0) + 0.5);
+					
+					if (volume[v_z].at<uchar>(v_x, v_y) > 0){
+						float q_func = q[i*h3 + p_z*h2 + p_x*H + p_y];
 						j += q_func;
 					}
 				}
 			}
 		}
+		// get maximum of J values
 		if (maxValue < j) {
 			maxValue = j;
 			result = d[i];
 		}
 	}
-	if (maxValue < -0.01) {
-		result = Vec3f(0, 0, 0);
-	}
+
+	density = (maxValue > 0.001) ? 1 : 0;
 	return result;
 }
-
-
 
 int main(int argc, char **argv) {
 
 	vector<Mat> volumeData(IMG_NUM);
-	float qfuncData[DIRNUMSQU][H][H][H];
+	vector<Mat> R(DIRNUMSQU, Mat(3, 3, CV_32FC1));
+	float qfuncData[DIRNUMSQU*H*H*H];
 	makeVolume(volumeData);
 
 	directionSet dicVec(DIRNUMSQU);
-	makedirectionSet(dicVec);
-
-	saveDistance(qfuncData, dicVec);
-
+	makedirectionSet(dicVec, R);
+	saveDistance(qfuncData, dicVec, R);
+	
 	/*
 	recover the orientation field
 	*/
@@ -160,8 +170,9 @@ int main(int argc, char **argv) {
 		cout << z << endl;
 		Mat image_dir(ROW, COL, CV_32FC3);
 		Mat image_den(ROW, COL, CV_32FC1);
+		bool density = 0;
 
-#pragma omp parallel for schedule(dynamic,8)
+		#pragma omp parallel for schedule(dynamic,8)
 		for (int x = 0; x < ROW; x++) {
 			for (int y = 0; y < COL; y++) {
 				if (volumeData[z].at<uchar>(x, y) > 0) {
@@ -171,21 +182,25 @@ int main(int argc, char **argv) {
 					continue;
 				}
 
-				Vec3f result = getMaxConvolution(dicVec, volumeData, Vec3i(z, x, y), qfuncData);
-				image_dir.at<Vec3f>(x, y)[0] = abs(result[1]) * 255;
-				image_dir.at<Vec3f>(x, y)[1] = abs(result[2]) * 255;
-				image_dir.at<Vec3f>(x, y)[2] = abs(result[0]) * 255;
-
+				Vec3f result = getMaxConvolution(dicVec, volumeData, Vec3i(z, x, y), qfuncData, density,R);
+				image_dir.at<Vec3f>(x, y)[0] = result[1] * 255;
+				image_dir.at<Vec3f>(x, y)[1] = result[2] * 255;
+				image_dir.at<Vec3f>(x, y)[2] = result[0] * 255;
+				if (density)
+					image_den.at<float>(x, y) = volumeData[z].at<uchar>(x, y);
+				else
+					image_den.at<float>(x, y) = 0;
 			}
 
-			if (x % 50 == 0) {
+			if (x % 100 == 0) {
 				cout << x << endl;
 				imwrite("d" + format("%d.jpg", z), image_dir);
 			}
-
 		}
-		imwrite("direction" + format("%d.jpg", z), image_dir);
+		imwrite("direction" + format("%d.tiff", z), image_dir);
+		imwrite("density" + format("%d.tiff", z), image_den);
 		image_dir.release();
+		image_den.release();
 	}
 
 }
