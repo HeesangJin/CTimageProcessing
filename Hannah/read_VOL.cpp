@@ -105,7 +105,7 @@ void printData(vector<float> &data) {
 	}
 }
 
-void findData(vector<float> &data, Point pos) {
+float findData(vector<float> &data, Point pos) {
 
 	/***********************************************************
 	data[((zpos*yres + ypos)*xres + xpos)*channels + chan]
@@ -113,7 +113,9 @@ void findData(vector<float> &data, Point pos) {
 	************************************************************/
 
 	int lookupValue = ((pos.z*sy + pos.y)*sx + pos.x)*channels + chan;
-	cout << "(x,y,z) : " << "(" << pos.x << ", " << pos.y << ", " << pos.z << ")" << endl;
-	cout << "lookup value : " << lookupValue << endl;
-	cout << "Find data[" << lookupValue << "] : " << data[lookupValue] << endl;
+	//cout << "(x,y,z) : " << "(" << pos.x << ", " << pos.y << ", " << pos.z << ")" << endl;
+	//cout << "lookup value : " << lookupValue << endl;
+	//cout << "Find data[" << lookupValue << "] : " << data[lookupValue] << endl;
+	float lookupData = data[lookupValue];
+	return lookupData;
 }

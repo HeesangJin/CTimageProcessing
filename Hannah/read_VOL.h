@@ -21,6 +21,6 @@ float bytesToFloat(unsigned char b0, unsigned char b1, unsigned char b2, unsigne
 void readHeader(unsigned char* buff);
 void readData(vector<float> &data, FILE *fp_sour);
 void printData(vector<float> &data);
-void findData(vector<float> &data, Point pos);
+float findData(vector<float> &data, Point pos);
 
 #endif

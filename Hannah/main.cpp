@@ -52,8 +52,8 @@ vector<vector<vector<vector<float> > > > qValues;
 
 
 string type2str(int type);
-void readNextInput(int curFileNum, cv::Mat &mat);
-void readNextInput(int curFileNum, cv::Mat &mat) {
+void readNextInput(int curFileNum, cv::Mat &mat, vector<float> &data);
+void readNextInput(int curFileNum, cv::Mat &mat, vector<float> &data) {
 	curFileNum += 1;
 	char curFileName[5];
 	sprintf(curFileName, "%04d", curFileNum);
@@ -63,23 +63,19 @@ void readNextInput(int curFileNum, cv::Mat &mat) {
 	string filename = "C:\\UCI\\Pramook_black_velvet_3.03um_80kV_TIFF\\Pramook_black_velvet_3.03um_80kV_TIFF\\" + curFileStr + ".tiff";
 	cout << "Opening image = " << filename << endl;
 
-	cv::Mat input;
+	cv::Mat input(sy, sx, CV_32FC1);
 
 	//read image
-	input = cv::imread(filename, cv::IMREAD_UNCHANGED);
-	input.convertTo(mat, CV_8U, 1.0 / 255.0);
-	mat.convertTo(mat, CV_32F, 1.0 / 255.0);
-
-	//    for(int i=500; i<mat.rows; i++){
-	//        for(int j=500; j<mat.cols; j++){
-	//            cout << mat.at<float>(i,j) << endl;
-	//        }
-	//    }
-
+	for (int i = 0; i < sy; i++) {
+		for (int j = 0; j < sx; j++) {
+			Point position = { j,i,curFileNum - 1 };
+			input.at<float>(i, j) = findData(data, position);
+		}
+	}
+	mat = input;
 
 	cout << "Image dimensions = " << mat.size() << endl;
 	//cout << mat.rows << " ," << mat.cols << endl;
-
 }
 
 
@@ -510,10 +506,7 @@ int main(int argc, const char * argv[]) {
 	vector<float> data((((long long)sx)*sy)*sz);
 	readData(data, fp_sour);
 
-	Point pos = { 30,30,30 };
-	findData(data, pos);
-
-	printData(data);
+	//printData(data);
 
 	fclose(fp_sour);
 
@@ -538,7 +531,7 @@ int main(int argc, const char * argv[]) {
 
 	for (int curFileNum = 0; curFileNum < NUM_PLANES; curFileNum++) {
 		//read input image
-		readNextInput(curFileNum, mat);
+		readNextInput(curFileNum, mat, data);
 
 		mat3d.push_back(mat);
 		//ok
