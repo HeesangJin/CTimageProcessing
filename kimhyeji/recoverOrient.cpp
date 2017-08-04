@@ -46,20 +46,18 @@ get rotation matrix
 z ,x , y 순서
 */
 Mat rotationMatrix(float d, float cosTheta) {
-	cosTheta = -cosTheta;
+	float sinTheta = sin(acos(cosTheta));
 
 	Mat XR = (Mat_<float>(3, 3) <<
-		sin(d),0, -cos(d),
+		cosTheta,0, -sinTheta,
 		0, 1, 0,
-		cos(d), 0, sin(d)
+		sinTheta, 0, cosTheta
 		);
-	float sinTheta = 1 - cosTheta*cosTheta;
 	Mat ZR = (Mat_<float>(3, 3) <<
 		1, 0, 0,
-		0, cosTheta, -sinTheta,
-		0, sinTheta, cosTheta
+		0, sin(d), cos(d),
+		0, -cos(d), sin(d)
 		);
-
 	return ZR*XR;
 }
 
@@ -68,16 +66,23 @@ make set of direction vectors
 */
 void makedirectionSet(directionSet &v, vector<Mat> &R) {
 	float M_PI2 = M_PI * 2;
-	float intervalTheta = M_PI2 / (DIRNUM - 1);
+	float intervalD = M_PI2 / (DIRNUM - 1);
 	float intervalZ = 2.0 / (DIRNUM - 1);
 
 	int count = 0;
 	for (float z = -1.0; z <= 1.0; z += intervalZ) {
-		for (float theta = 0; theta <= M_PI2; theta += intervalTheta) {
-			float x = sqrt(1.0 - pow(z, 2)) * cos(theta);
-			float y = sqrt(1.0 - pow(z, 2)) * sin(theta);
-			if (abs(z) == 1 && theta != 0) continue;
-			R[count] = rotationMatrix(theta, z);
+		for (float d = 0; d <= M_PI2; d += intervalD) {
+			float x = sqrt(1.0 - pow(z, 2)) * cos(d);
+			float y = sqrt(1.0 - pow(z, 2)) * sin(d);
+			if (abs(z) == 1 && d != 0) continue;
+			R[count] = rotationMatrix(d, z);
+			/*
+			Mat zVec = (Mat_<float>(3, 1) <<
+				1, 0, 0);
+			cout << endl;
+			cout << R[count] * zVec << endl;
+			cout << z << ' '<< cos(d) << ' ' << sin(d) << endl;
+			*/
 			v[count++] = Vec3f(z, x, y);
 		}
 	}
@@ -197,9 +202,9 @@ int main(int argc, char **argv) {
 
 			}
 
-			if (x % 100 == 0) {
+			if (x % 10 == 0) {
 				cout << x << endl;
-				imwrite("zx" + format("%d.jpg", z), image_dir);
+				imwrite("z" + format("%d.jpg", z), image_dir);
 			}
 		}
 		imwrite("direction" + format("%d.tiff", z), image_dir);
