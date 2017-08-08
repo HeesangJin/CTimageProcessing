@@ -1,13 +1,13 @@
 #define _USE_MATH_DEFINES
-
+#include "readFile.h"
 #include "opencv2/opencv.hpp"
 #include <iostream>
 #include <vector>
 #include <cmath>
 #include <omp.h>
-#define ROW 1010//1010
-#define COL 988 //988
-#define IMG_NUM 50 //990
+#define ROW 494//1010
+#define COL 505 //988
+#define IMG_NUM 495 //990
 #define H 13 // H + 1
 #define DIRNUM 12
 #define DIRNUMSQU 122 // DIRNUM * DIRNUM - (2 * DIRNUM-1)
@@ -22,28 +22,63 @@ int s = 3;
 int t = 4;
 
 string fileLocate = "C:\\Users\\kimhyeji\\Desktop\\UCI\\project\\Pramook_black_velvet_3.03um_80kV_TIFF\\";
+
+
 /*
-open image files and store to 3D volume
+open image files and store to 3D volume with Image Data
 */
-void makeVolume(vector<Mat> &v) {
+void makeVolumeWithImage(vector<Mat> &v) {
 	for (int i = 1; i <= IMG_NUM; i++) {
 		Mat img;
 		string image = fileLocate + format("%04d.tiff", i);
 		//img = imread(image, CV_LOAD_IMAGE_ANYCOLOR);
 		img = imread(image, CV_LOAD_IMAGE_UNCHANGED);
 		normalize(img, img, 0.0, 1, CV_MINMAX, CV_32F);
-		threshold(img, img, 0.7, 1, THRESH_BINARY_INV);
+		threshold(img, img, 0.64, 1, THRESH_BINARY_INV);
 		img.convertTo(img, CV_8U, 255, 0);
 		v[i - 1] = img;
-		//imshow("img", img);
-		//waitKey(0);
+		imshow("img", img);
+		waitKey(0);
+		img.release();
+}
+/*
+open image files and store to 3D volume
+*/
+void makeVolume(vector<Mat> &v) {
+
+	FILE    *fp_sour;
+	unsigned char buff[48]; //48byte
+	size_t   n_size;
+
+	fp_sour = fopen((fileLocate + "Pramook_black_velvet_3.03um_80kV_down.vol").c_str(), "rb");
+	n_size = fread(buff, 1, 48, fp_sour);
+
+	readHeader(buff);
+
+	vector<float> data((((long long)sx)*sy)*sz);
+	readData(data, fp_sour);
+
+	//printData(data);
+
+	fclose(fp_sour);
+	for (int i = 0; i < IMG_NUM; i++) {
+		Mat img = Mat_<float>(ROW, COL);
+
+		for (int x = 0; x < ROW; x++) {
+			for (int y = 0; y < COL; y++) {
+				img.at<float>(x,y) = findData(data, { x,y,i });
+			}
+		}
+		threshold(img, img, 0.55, 1, THRESH_BINARY_INV);
+		img.convertTo(img, CV_8U, 255, 0);
+		v[i] = img;
 		img.release();
 	}
 }
 
 /*
 get rotation matrix
-z ,x , y 순서
+z,x,y
 */
 Mat rotationMatrix(float d, float cosTheta) {
 	float sinTheta = sin(acos(cosTheta));
@@ -175,7 +210,7 @@ int main(int argc, char **argv) {
 	/*
 	recover the orientation field
 	*/
-	for (int z = 0; z < IMG_NUM; z++) {
+	for (int z = 30; z < IMG_NUM; z++) {
 		cout << z << endl;
 		Mat image_dir(ROW, COL, CV_32FC3);
 		Mat image_den(ROW, COL, CV_32FC1);
@@ -192,9 +227,9 @@ int main(int argc, char **argv) {
 				}
 				Vec3f result = getMaxConvolution(dicVec, volumeData, Vec3i(z, x, y), qfuncData, density, R);
 
-				image_dir.at<Vec3f>(x, y)[0] = result[1] * 255;//b
-				image_dir.at<Vec3f>(x, y)[1] = result[2] * 255;//g
-				image_dir.at<Vec3f>(x, y)[2] = result[0] * 255;//r
+				image_dir.at<Vec3f>(x, y)[0] = result[1] * 255;//b - x(row)
+				image_dir.at<Vec3f>(x, y)[1] = result[2] * 255;//g - y(col)
+				image_dir.at<Vec3f>(x, y)[2] = result[0] * 255;//r - z(depth)
 				if (density)
 					image_den.at<float>(x, y) = volumeData[z].at<uchar>(x, y);
 				else
@@ -202,9 +237,9 @@ int main(int argc, char **argv) {
 
 			}
 
-			if (x % 10 == 0) {
+			if (x % 100 == 0) {
 				cout << x << endl;
-				imwrite("z" + format("%d.jpg", z), image_dir);
+				imwrite("zz" + format("%d.jpg", z), image_dir);
 			}
 		}
 		imwrite("direction" + format("%d.tiff", z), image_dir);
