@@ -11,6 +11,7 @@
 #define H 13 // H + 1
 #define DIRNUM 12
 #define DIRNUMSQU 122 // DIRNUM * DIRNUM - (2 * DIRNUM-1)
+#define JTHRESHOLD 0.001
 using namespace cv;
 using namespace std;
 
@@ -22,6 +23,7 @@ int s = 3;
 int t = 4;
 
 string fileLocate = "C:\\Users\\kimhyeji\\Desktop\\UCI\\project\\Pramook_black_velvet_3.03um_80kV_TIFF\\";
+
 
 
 /*
@@ -42,6 +44,7 @@ void makeVolumeWithImage(vector<Mat> &v) {
 		img.release();
 	}
 }
+
 /*
 open image files and store to 3D volume
 */
@@ -65,9 +68,9 @@ void makeVolume(vector<Mat> &v) {
 	for (int i = 0; i < IMG_NUM; i++) {
 		Mat img = Mat_<float>(ROW, COL);
 
-		for (int x = 0; x < ROW; x++) {
-			for (int y = 0; y < COL; y++) {
-				img.at<float>(x,y) = findData(data, { x,y,i });
+		for (int y = 0; y < ROW; y++) {
+			for (int x = 0; x < COL; x++) {
+			img.at<float>(y, x) = findData(data, { x,y,i });
 			}
 		}
 		threshold(img, img, 0.55, 1, THRESH_BINARY_INV);
@@ -79,12 +82,12 @@ void makeVolume(vector<Mat> &v) {
 
 /*
 get rotation matrix
-z,x,y
+z,y,x
 */
 Mat rotationMatrix(float d, float cosTheta) {
 	float sinTheta = sin(acos(cosTheta));
 
-	Mat XR = (Mat_<float>(3, 3) <<
+	Mat YR = (Mat_<float>(3, 3) <<
 		cosTheta,0, -sinTheta,
 		0, 1, 0,
 		sinTheta, 0, cosTheta
@@ -94,7 +97,7 @@ Mat rotationMatrix(float d, float cosTheta) {
 		0, sin(d), cos(d),
 		0, -cos(d), sin(d)
 		);
-	return ZR*XR;
+	return ZR*YR;
 }
 
 /*
@@ -108,18 +111,11 @@ void makedirectionSet(directionSet &v, vector<Mat> &R) {
 	int count = 0;
 	for (float z = -1.0; z <= 1.0; z += intervalZ) {
 		for (float d = 0; d <= M_PI2; d += intervalD) {
-			float x = sqrt(1.0 - pow(z, 2)) * cos(d);
-			float y = sqrt(1.0 - pow(z, 2)) * sin(d);
+			float y = sqrt(1.0 - pow(z, 2)) * cos(d);
+			float x = sqrt(1.0 - pow(z, 2)) * sin(d);
 			if (abs(z) == 1 && d != 0) continue;
 			R[count] = rotationMatrix(d, z);
-			/*
-			Mat zVec = (Mat_<float>(3, 1) <<
-				1, 0, 0);
-			cout << endl;
-			cout << R[count] * zVec << endl;
-			cout << z << ' '<< cos(d) << ' ' << sin(d) << endl;
-			*/
-			v[count++] = Vec3f(z, x, y);
+			v[count++] = Vec3f(z, y, x);
 		}
 	}
 }
@@ -140,12 +136,12 @@ void saveDistance(float(&saveData)[H*H*H], const directionSet &d, vector<Mat> &R
 	int h_half = H / 2;
 
 	for (int p_z = 0; p_z < H; p_z++) {
-		for (int p_x = 0; p_x < H; p_x++) {
-			for (int p_y = 0; p_y < H; p_y++) {
-				float dist = getDistance(Vec3f(1, 0, 0), Vec3f(p_z - h_half, p_x - h_half, p_y - h_half));
+		for (int p_y = 0; p_y < H; p_y++) {
+			for (int p_x = 0; p_x < H; p_x++) {
+				float dist = getDistance(Vec3f(1, 0, 0), Vec3f(p_z - h_half, p_y - h_half, p_x - h_half));
 				float pow_dist = dist * dist;
 				float q_func = -2 * exp(-s * pow_dist) + exp(-t * pow_dist);
-				saveData[p_z*h2 + p_x*H + p_y] = q_func;
+				saveData[p_z*h2 + p_y*H + p_x] = q_func;
 			}
 		}
 	}
@@ -155,9 +151,9 @@ void saveDistance(float(&saveData)[H*H*H], const directionSet &d, vector<Mat> &R
 get Maximum convolution value
 */
 Vec3f getMaxConvolution(const directionSet &d, const vector<Mat> &volume, const Vec3i &v, const float(&q)[H * H * H], bool density, vector<Mat> &R) {
-	int x = v[1];
-	int y = v[2];
 	int z = v[0];
+	int y = v[1];
+	int x = v[2];
 	float maxValue = -99999;
 	int h_half = H / 2;
 
@@ -166,20 +162,20 @@ Vec3f getMaxConvolution(const directionSet &d, const vector<Mat> &volume, const 
 		float j = 0;
 		for (int p_z = 0; p_z < H; p_z++) {
 			if (z + p_z >= IMG_NUM) continue;
-			for (int p_x = 0; p_x < H; p_x++) {
-				if (x + p_x >= ROW) continue;
-				for (int p_y = 0; p_y < H; p_y++) {
-					if (y + p_y >= COL) continue;
+			for (int p_y = 0; p_y < H; p_y++) {
+				if (y + p_y >= ROW) continue;
+				for (int p_x = 0; p_x < H; p_x++) {
+					if (x + p_x >= COL) continue;
 					Mat x_vec = (Mat_<float>(3, 1) <<
-						p_z - h_half, p_x - h_half, p_y - h_half);
+						p_z - h_half, p_y - h_half, p_x - h_half);
 					Mat p = R[i] * x_vec;
-					int v_x = int(x + p.at<float>(1, 0) + 0.5);
-					int v_y = int(y + p.at<float>(2, 0) + 0.5);
+					int v_y = int(y + p.at<float>(1, 0) + 0.5);
+					int v_x = int(x + p.at<float>(2, 0) + 0.5);
 					int v_z = int(z + p.at<float>(0, 0) + 0.5);
 
 					if (v_z < 0) continue;
 					if (volume[v_z].at<uchar>(v_x, v_y) > 0) {
-						float q_func = q[p_z*h2 + p_x*H + p_y];
+						float q_func = q[p_z*h2 + p_y*H + p_x];
 						j += q_func;
 					}
 
@@ -193,7 +189,7 @@ Vec3f getMaxConvolution(const directionSet &d, const vector<Mat> &volume, const 
 		}
 	}
 
-	density = (maxValue > 0.001) ? 1 : 0;
+	density = (maxValue > JTHRESHOLD) ? 1 : 0;
 	return result;
 }
 
@@ -218,29 +214,31 @@ int main(int argc, char **argv) {
 		bool density = 0;
 
 		#pragma omp parallel for schedule(dynamic,6)
-		for (int x = 0; x < ROW; x++) {
-			for (int y = 0; y < COL; y++) {
-				if (volumeData[z].at<uchar>(x, y) > 0) {
-					image_dir.at<Vec3f>(x, y)[0] = 0;
-					image_dir.at<Vec3f>(x, y)[1] = 0;
-					image_dir.at<Vec3f>(x, y)[2] = 0;
+		for (int y = 0; y < ROW; y++) {
+			for (int x = 0; x < COL; x++) {
+				if (volumeData[z].at<uchar>(y, x) > 0) {
+					image_dir.at<Vec3f>(y, x)[0] = 0;
+					image_dir.at<Vec3f>(y, x)[1] = 0;
+					image_dir.at<Vec3f>(y, x)[2] = 0;
 					continue;
 				}
-				Vec3f result = getMaxConvolution(dicVec, volumeData, Vec3i(z, x, y), qfuncData, density, R);
+				Vec3f result = getMaxConvolution(dicVec, volumeData, Vec3i(z, y, x), qfuncData, density, R);
 
-				image_dir.at<Vec3f>(x, y)[0] = result[1] * 255;//b - x(row)
-				image_dir.at<Vec3f>(x, y)[1] = result[2] * 255;//g - y(col)
-				image_dir.at<Vec3f>(x, y)[2] = result[0] * 255;//r - z(depth)
-				if (density)
-					image_den.at<float>(x, y) = volumeData[z].at<uchar>(x, y);
-				else
-					image_den.at<float>(x, y) = 0;
-
+				if (density) {
+					image_dir.at<Vec3f>(y, x)[0] = result[1] * 255;//b - x(row)
+					image_dir.at<Vec3f>(y, x)[1] = result[2] * 255;//g - y(col)
+					image_dir.at<Vec3f>(y, x)[2] = result[0] * 255;//r - z(depth)
+				}
+				else {
+					image_dir.at<Vec3f>(y, x)[0] = 0;
+					image_dir.at<Vec3f>(y, x)[1] = 0;
+					image_dir.at<Vec3f>(y, x)[2] = 0;
+				}
 			}
 
-			if (x % 100 == 0) {
-				cout << x << endl;
-				imwrite("zz" + format("%d.jpg", z), image_dir);
+			if (y % 10 == 0) {
+				cout << y << endl;
+				imwrite("0.001" + format("%d.jpg", z), image_dir);
 			}
 		}
 		imwrite("direction" + format("%d.tiff", z), image_dir);
