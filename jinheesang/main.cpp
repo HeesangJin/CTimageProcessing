@@ -18,8 +18,8 @@
 #define EPSILON_D 0.55
 #define EPSILON_J -1
 
-#define N_THETA 10
-#define N_Z 20
+#define N_THETA 8
+#define N_Z 15
 #define LENGTH_L 6
 
 #define VALUE_S 3
@@ -29,7 +29,6 @@ typedef struct{
     float x;
     float y;
     float z;
-    float theta;
 }Direction;
 
 typedef struct{
@@ -48,7 +47,6 @@ int num_d;
 
 //vector[num_d][LENGTH_L+1]
 vector<vector<vector<vector<float> > > > qValues;
-
 
 string type2str(int type);
 void readNextInput(int curFileNum, cv::Mat &mat);
@@ -215,8 +213,8 @@ void calculAllQs(vector<Direction> &setOfDirections){
 }
 
 
-bool isValidPoint(Point point);
-bool isValidPoint(Point point){
+bool isValidPoint(Direction point);
+bool isValidPoint(Direction point){
     if(point.x < 0 || point.x >= COLS || point.y < 0 || point.y >= ROWS || point.z < 0 || point.z >= NUM_PLANES)
         return false;
     return true;
@@ -228,9 +226,78 @@ float getFxFromVoxel(Point voxel){
     return (mat3dFx[voxel.z]).at<float>(voxel.y, voxel.x);
 }
 
+float getValueFromMatrix(int x, int y, int z, vector<cv::Mat> &mat3d);
+float getValueFromMatrix(int x, int y, int z, vector<cv::Mat> &mat3d){
+    return (mat3d[z]).at<float>(y, x);
+}
 
-float calculJ(Point &curVoxel, Direction &d, int dir_i);
-float calculJ(Point &curVoxel, Direction &d, int dir_i){
+//Find value of voxel(float) using nearby voxel(int)
+float interpolateOneChanValue(Direction &voxel, vector<cv::Mat> &mat3d);
+float interpolateOneChanValue(Direction &voxel, vector<cv::Mat> &mat3d){
+    int ix = (int)floor(voxel.x);
+    int iy = (int)floor(voxel.y);
+    int iz = (int)floor(voxel.z);
+    
+    //error check
+    if(ix < 0 || iy >= COLS-1 || iy < 0 || iy >= ROWS-1 || iz < 0 || iz >= NUM_PLANES-1 )
+        return 0;
+    
+    float fx = voxel.x - (float)ix;
+    float fy = voxel.y - (float)iy;
+    float fz = voxel.z - (float)iz;
+    
+    float leftBot = (1-fz) * getValueFromMatrix(ix, iy, iz, mat3d) + fz * getValueFromMatrix(ix, iy, iz+1, mat3d);
+    float rightBot = (1-fz) * getValueFromMatrix(ix+1, iy, iz, mat3d) + fz * getValueFromMatrix(ix+1, iy, iz+1, mat3d);
+    float leftUp = (1-fz) * getValueFromMatrix(ix, iy+1, iz, mat3d) + fz * getValueFromMatrix(ix, iy+1, iz+1, mat3d);
+    float rightUp = (1-fz) * getValueFromMatrix(ix+1, iy+1, iz, mat3d) + fz * getValueFromMatrix(ix+1, iy+1, iz+1, mat3d);
+    
+    float centerBot = (1-fx) * leftBot + fx * rightBot;
+    float centerUp = (1-fx) * leftUp + fx * rightUp;
+    
+    float result = (1-fy) * centerBot + fy * centerUp;
+    
+    return result;
+}
+
+Direction rotateMatrix(Direction voxel, float degree, char axis);
+Direction rotateMatrix(Direction voxel, float degree, char axis){
+    float preVoxelTemp[3][1] = {{voxel.x}, {voxel.y}, {voxel.z}};
+    cv::Mat preVoxel = cv::Mat(3, 1, CV_32FC1, preVoxelTemp);
+    
+    cv::Mat rotateMtx;
+    if(axis == 'x'){
+        float rotateTemp[3][3] = {{1, 0, 0}, {0, cos(degree), -sin(degree)}, {0, sin(degree), cos(degree)}};
+        rotateMtx = cv::Mat(3, 3, CV_32FC1, rotateTemp);
+    }
+    else if(axis == 'y'){
+        float rotateTemp[3][3] = {{cos(degree), 0, sin(degree)}, {0, 1, 0}, {-sin(degree), 0, cos(degree)}};
+        rotateMtx = cv::Mat(3, 3, CV_32FC1, rotateTemp);
+    }
+    else{
+        float rotateTemp[3][3] = {{cos(degree), -sin(degree), 0}, {sin(degree), cos(degree), 0}, {0, 0, 1}};
+        rotateMtx = cv::Mat(3, 3, CV_32FC1, rotateTemp);
+    }
+    
+    //cout << "rows: " << preVoxel.rows << ", cols: " << preVoxel.cols << endl;
+    cv::Mat resultTemp = rotateMtx * preVoxel;
+    Direction result = { resultTemp.at<float>(0,0), resultTemp.at<float>(1,0), resultTemp.at<float>(2,0) };
+    return result;
+}
+
+
+Direction rotateVoxelByDegree(int indexDegree, Point voxel, vector<Direction> &degreesByDirections);
+Direction rotateVoxelByDegree(int indexDegree, Point voxel, vector<Direction> &degreesByDirections){
+    Direction degrees = degreesByDirections[indexDegree];
+    Direction temp = {(float)voxel.x, (float)voxel.y, (float)voxel.z };
+    temp = rotateMatrix(temp, degrees.x, 'x');
+    temp = rotateMatrix(temp, degrees.y, 'y');
+    temp = rotateMatrix(temp, degrees.z, 'z');
+    
+    return temp;
+}
+
+float calculJ(Point &curVoxel, Direction &d, int dir_i, vector<Direction> &degreesByDirections);
+float calculJ(Point &curVoxel, Direction &d, int dir_i, vector<Direction> &degreesByDirections){
     float J=0;
     
     //each p in V(V`s size is l)
@@ -238,16 +305,20 @@ float calculJ(Point &curVoxel, Direction &d, int dir_i){
     for(int p_x= -half_l; p_x<=half_l; p_x++){
         for(int p_y= -half_l; p_y<=half_l; p_y++){
             for(int p_z= -half_l; p_z<=half_l; p_z++){
-                Point curP = {p_x, p_y, p_z};
-                Point curXsumP = {p_x + curVoxel.x , p_y + curVoxel.y , p_z + curVoxel.z };
+                Direction curXmulR = rotateVoxelByDegree(dir_i, curVoxel, degreesByDirections);
+                Direction curXmulRsumP = {curXmulR.x + p_x , curXmulR.y + p_y , curXmulR.z + p_z };
                 
                 //cout << curXsumP.x << " " << curXsumP.y << " " << curXsumP.z << endl;
                 // J += f(x+p) * q(d;p)
-                if( isValidPoint(curXsumP) ){
+                if( isValidPoint(curXmulRsumP) ){
                     //cout << "curXsumP.x: "<< curXsumP.x << ", curXsumP.y: "<< curXsumP.y << ", curXsumP.z: " << curXsumP.z <<endl;
                     
                     //cout << dir_i << " " << p_x+half_l << " " << p_y+half_l << " " << p_z+half_l << endl;
-                    J += getFxFromVoxel(curXsumP) * qValues[dir_i][p_x+half_l][p_y+half_l][p_z+half_l];
+                    
+                    //f(x*R + p) * q(d;p)
+                    
+                    J += interpolateOneChanValue(curXmulRsumP, mat3dFx) * qValues[dir_i][p_x+half_l][p_y+half_l][p_z+half_l];
+                    //J += getFxFromVoxel(curXmulRsumP) * qValues[dir_i][p_x+half_l][p_y+half_l][p_z+half_l];
                     //cout << "current J is: " << J << endl;
                 }
             }
@@ -257,23 +328,24 @@ float calculJ(Point &curVoxel, Direction &d, int dir_i){
     return J;
 }
 
-void showJvalueDot(int x, int y, int z, int dir_i, vector<Direction> &setOfDirections);
-void showJvalueDot(int x, int y, int z, int dir_i, vector<Direction> &setOfDirections){
+void showJvalueDot(int x, int y, int z, int dir_i, vector<Direction> &setOfDirections, vector<Direction> &degreesByDirections);
+void showJvalueDot(int x, int y, int z, int dir_i, vector<Direction> &setOfDirections, vector<Direction> &degreesByDirections){
     Point voxel = {x, y, z};
-    float J = calculJ(voxel, setOfDirections[dir_i], dir_i);
+    float J = calculJ(voxel, setOfDirections[dir_i], dir_i, degreesByDirections);
     cout << "(" << x << ", " << y << ", " << z << ") dir_i: " << dir_i << "Dir: (" << setOfDirections[dir_i].x << ", " << setOfDirections[dir_i].y << ", "<< setOfDirections[dir_i].z << "), J: " << J << endl;
 }
 
 void showAllJvaluesDot(int x, int y, int z, vector<Direction> &setOfDirections);
 void showAllJvaluesDot(int x, int y, int z, vector<Direction> &setOfDirections){
     for(int i=0; i<(int)setOfDirections.size(); i++){
-        showJvalueDot(x, y, z, i, setOfDirections);
+        //showJvalueDot(x, y, z, i, setOfDirections);
     }
 }
 
 
-void calculVoxelDirection(Point &curPoint, cv::Mat &mat, cv::Mat &matFx, cv::Mat &matDir, cv::Mat &matCT, vector<Direction> &setOfDirections);
-void calculVoxelDirection(Point &curPoint, cv::Mat &mat, cv::Mat &matFx, cv::Mat &matDir, cv::Mat &matCT, vector<Direction> &setOfDirections){
+
+void calculVoxelDirection(Point &curPoint, cv::Mat &mat, cv::Mat &matFx, cv::Mat &matDir, cv::Mat &matCT, vector<Direction> &setOfDirections, vector<Direction> &degreesByDirections);
+void calculVoxelDirection(Point &curPoint, cv::Mat &mat, cv::Mat &matFx, cv::Mat &matDir, cv::Mat &matCT, vector<Direction> &setOfDirections, vector<Direction> &degreesByDirections){
     int rows = matFx.rows;
     int cols = matFx.cols;
     
@@ -296,7 +368,7 @@ void calculVoxelDirection(Point &curPoint, cv::Mat &mat, cv::Mat &matFx, cv::Mat
                     
                     //cout << "i: "<< i << ", y: " << j << ", dir_i: "<< dir_i << "dir: (" << d.x << ", " << d.y << ", " << d.z << ")" <<endl;
                     //Calculate J(x,d)
-                    float tempJ = calculJ(curPoint, d, dir_i);
+                    float tempJ = calculJ(curPoint, d, dir_i, degreesByDirections);
                     //cout << "maxJ: " << maxJ << ", tempJ: " << tempJ << endl;
                     if(tempJ > maxJ){
                         maxJ = tempJ;
@@ -356,6 +428,19 @@ void debugSetToDirFromFx(cv::Mat &matFx, cv::Mat &matDir){
     }
 }
 
+void calculDegreesByDirections(vector<Direction> &setOfDirections, vector<Direction> &degreesByDirections);
+void calculDegreesByDirections(vector<Direction> &setOfDirections, vector<Direction> &degreesByDirections){
+    degreesByDirections.resize((int)setOfDirections.size());
+    for(int i=0; i<(int)setOfDirections.size(); i++){
+        degreesByDirections[i].x = acos(setOfDirections[i].x);
+        degreesByDirections[i].y = acos(setOfDirections[i].y);
+        degreesByDirections[i].z = acos(setOfDirections[i].z);
+    }
+}
+
+
+
+
 
 void calculSetOfDirections(vector<Direction> &setOfDirections);
 void calculSetOfDirections(vector<Direction> &setOfDirections){
@@ -365,7 +450,6 @@ void calculSetOfDirections(vector<Direction> &setOfDirections){
     
     for(int i_z=0; i_z<=N_Z; i_z+= 1){
         float z = -1 + i_z * dividedZ;
-        cout << dividedZ << endl;
         for(int i_theta=0; i_theta <=N_THETA; i_theta += 1){
             float theta = i_theta * dividedTheta;
             float x = (sqrt( 1 - z * z )) * cos(theta);
@@ -377,6 +461,10 @@ void calculSetOfDirections(vector<Direction> &setOfDirections){
     num_d = (int)setOfDirections.size();
 }
 
+
+
+
+//for debug
 void showAllDirections(vector<Direction> &setOfDirections){
     for(int i= 0; i<(int)setOfDirections.size(); i++){
         Direction t = setOfDirections[i];
@@ -401,7 +489,7 @@ void showAllFx(vector<cv::Mat> &mat){
     }
 }
 
-
+//for debug
 void drawRowLine(cv::Mat &mat, int lineNumber);
 void drawColLine(cv::Mat &mat, int lineNumber);
 
@@ -440,6 +528,8 @@ void drawDot(cv::Mat &mat, int row, int col);
 void drawDot(cv::Mat &mat, int row, int col){
     drawSquare(mat, row, col, row, col);
 }
+//============ for debug
+
 
 void makeDensityFromDir(cv::Mat &matDir, cv::Mat &matDensity);
 void makeDensityFromDir(cv::Mat &matDir, cv::Mat &matDensity){
@@ -501,23 +591,29 @@ int main(int argc, const char * argv[]){
     
     vector<cv::Mat> mat3d, mat3dDir;
     vector<Direction> setOfDirections;
-    
+    vector<Direction> degreesByDirections;
     
     cout << "Start processing" << endl;
     
     
     calculSetOfDirections(setOfDirections);
+    calculDegreesByDirections(setOfDirections, degreesByDirections);
+
+    //showAllDirections(degreesByDirections); //debug
     
-    //debug
-    showAllDirections(setOfDirections);
+    //rotateMatrix Test
+    //Direction originalPoint = {0, 1, 1};
+    //Direction rotatedPoint = rotateMatrix(originalPoint, 3.14, 'x');
+    //rotatedPoint = rotateMatrix(rotatedPoint, 3.14, 'x');
+    //cout << "x: "<<rotatedPoint.x << ", y: " << rotatedPoint.y << ", z: " << rotatedPoint.z << endl;
     
+    //return 0; //debug
     
     for(int curFileNum = 0; curFileNum < NUM_PLANES; curFileNum++){
         //read input image
         readNextInput(curFileNum, mat);
         
         mat3d.push_back(mat);
-        //ok
         
         //caculate f(x)
         matFx = cv::Mat(mat.rows, mat.cols, CV_32F, float(0));
@@ -554,7 +650,7 @@ int main(int argc, const char * argv[]){
     matCT = cv::Mat(matFx.rows,matFx.cols, CV_32F, float(0));
     
     // Calculating Directions
-    calculVoxelDirection(curPoint, mat, matFx, matDir, matCT, setOfDirections);
+    calculVoxelDirection(curPoint, mat, matFx, matDir, matCT, setOfDirections, degreesByDirections);
     
     mat3dDir.push_back(matDir);
     mat3dCT.push_back(matCT);
