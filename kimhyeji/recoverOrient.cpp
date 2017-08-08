@@ -40,6 +40,7 @@ void makeVolumeWithImage(vector<Mat> &v) {
 		imshow("img", img);
 		waitKey(0);
 		img.release();
+	}
 }
 /*
 open image files and store to 3D volume
