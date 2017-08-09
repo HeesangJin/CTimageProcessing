@@ -5,10 +5,11 @@
 #include <vector>
 #include <cmath>
 #include <omp.h>
-#define ROW 494//1010
-#define COL 505 //988
+#define ROW 505//1010
+#define COL 494 //988
 #define IMG_NUM 495 //990
-#define H 13 // H + 1
+#define H 25 //H = (filter size * H_DIV) + 1 
+#define H_DIV 2
 #define DIRNUM 12
 #define DIRNUMSQU 122 // DIRNUM * DIRNUM - (2 * DIRNUM-1)
 #define JTHRESHOLD -8.3
@@ -141,7 +142,7 @@ void saveDistance(float(&saveData)[H*H*H], const directionSet &d, vector<Mat> &R
 	for (int p_z = 0; p_z < H; p_z++) {
 		for (int p_y = 0; p_y < H; p_y++) {
 			for (int p_x = 0; p_x < H; p_x++) {
-				float dist = getDistance(Vec3f(1, 0, 0), Vec3f(p_z - h_half, p_y - h_half, p_x - h_half));
+				float dist = getDistance(Vec3f(1, 0, 0), Vec3f((p_z - h_half)/H_DIV, (p_y - h_half)/ H_DIV, (p_x - h_half)/ H_DIV));
 				float pow_dist = dist * dist;
 				float q_func = -2 * exp(-s * pow_dist) + exp(-t * pow_dist);
 				saveData[p_z*h2 + p_y*H + p_x] = q_func;
@@ -153,7 +154,7 @@ void saveDistance(float(&saveData)[H*H*H], const directionSet &d, vector<Mat> &R
 /*
 testing code for making J value images.
 */
-float getJvalue(const directionSet &d, const vector<Mat> &volume, const Vec3i &v, const float(&q)[H * H * H], bool density, vector<Mat> &R) {
+float getJvalue(const directionSet &d, const vector<Mat> &volume, const Vec3i &v, const float(&q)[H * H * H], vector<Mat> &R) {
 	int z = v[0];
 	int y = v[1];
 	int x = v[2];
@@ -164,14 +165,16 @@ float getJvalue(const directionSet &d, const vector<Mat> &volume, const Vec3i &v
 	for (int i = 0; i < DIRNUMSQU; i++) {
 		float j = 0;
 		for (int p_z = 0; p_z < H; p_z++) {
-			if (z + p_z >= IMG_NUM) continue;
+			if (z + p_z/ H_DIV >= IMG_NUM) continue;
 			for (int p_y = 0; p_y < H; p_y++) {
-				if (y + p_y >= ROW) continue;
+				if (y + p_y/ H_DIV >= ROW) continue;
 				for (int p_x = 0; p_x < H; p_x++) {
-					if (x + p_x >= COL) continue;
+					if (x + p_x/ H_DIV >= COL) continue;
 					Mat x_vec = (Mat_<float>(3, 1) <<
-						p_z - h_half, p_y - h_half, p_x - h_half);
+						(p_z - h_half)/ H_DIV, (p_y - h_half)/ H_DIV, (p_x - h_half)/ H_DIV);
 					Mat p = R[i] * x_vec;
+
+					//보간해야해 보간 으아악
 					int v_z = int(z + p.at<float>(0, 0) + 0.5);
 					int v_y = int(y + p.at<float>(1, 0) + 0.5);
 					int v_x = int(x + p.at<float>(2, 0) + 0.5);
@@ -192,14 +195,13 @@ float getJvalue(const directionSet &d, const vector<Mat> &volume, const Vec3i &v
 		}
 	}
 
-	density = (maxValue > 0.001) ? 1 : 0;
 	return maxValue;
 }
 
 /*
 get Maximum convolution value
 */
-Vec3f getMaxConvolution(const directionSet &d, const vector<Mat> &volume, const Vec3i &v, const float(&q)[H * H * H], bool &density, vector<Mat> &R) {
+Vec3f getMaxConvolution(const directionSet &d, const vector<Mat> &volume, const Vec3i &v, const float(&q)[H * H * H], vector<Mat> &R) {
 	int z = v[0];
 	int y = v[1];
 	int x = v[2];
@@ -210,13 +212,13 @@ Vec3f getMaxConvolution(const directionSet &d, const vector<Mat> &volume, const 
 	for (int i = 0; i < DIRNUMSQU; i++) {
 		float j = 0;
 		for (int p_z = 0; p_z < H; p_z++) {
-			if (z + p_z >= IMG_NUM) continue;
+			if (z + p_z/ H_DIV >= IMG_NUM) continue;
 			for (int p_y = 0; p_y < H; p_y++) {
-				if (y + p_y >= ROW) continue;
+				if (y + p_y/ H_DIV >= ROW) continue;
 				for (int p_x = 0; p_x < H; p_x++) {
-					if (x + p_x >= COL) continue;
+					if (x + p_x/ H_DIV >= COL) continue;
 					Mat x_vec = (Mat_<float>(3, 1) <<
-						p_z - h_half, p_y - h_half, p_x - h_half);
+						(p_z - h_half)/ H_DIV, (p_y - h_half)/ H_DIV,( p_x - h_half)/ H_DIV);
 					Mat p = R[i] * x_vec;
 					int v_z = int(z + p.at<float>(0, 0) + 0.5);
 					int v_y = int(y + p.at<float>(1, 0) + 0.5);
@@ -246,7 +248,7 @@ Vec3f getMaxConvolution(const directionSet &d, const vector<Mat> &volume, const 
 check keyboard input,
 change the J threshold
 */
-void onChange(int pos, void *user){
+void onChangeJ(int pos, void *user){
 
 	Mat image = ((Mat*)user)[0];
 	Mat test(ROW, COL, CV_8UC1);
@@ -263,11 +265,31 @@ void onChange(int pos, void *user){
 }
 
 /*
+check keyboard input,
+change the J threshold
+*/
+void onChangeIB(int pos, void *user) {
+
+	Mat image = ((Mat*)user)[0];
+	Mat test(ROW, COL, CV_8UC1);
+	float threshold = pos/255;
+	for (int i = 0; i < 494; i++) {
+		for (int j = 0; j < 505; j++) {
+			if (image.at<float>(i, j) > threshold)
+				test.at<uchar>(i, j) = 255;
+			else test.at<uchar>(i, j) = 0;
+		}
+	}
+	cout << threshold << endl;
+	imshow("image", test);
+}
+
+/*
 set J threshold with ,(-) .(+) keys
 threshold = pos * -0.1
 -8.2
 */
-void setThreshold(){
+void setThreshold(void (*onChange)(int, void *)){
 
 	Mat image = imread(fileLocate + "test.exr", CV_LOAD_IMAGE_UNCHANGED);
 	int pos = 100;
@@ -281,7 +303,7 @@ void setThreshold(){
 		switch (Key) {
 		case ',':
 			pos--;
-			onChange(pos, (void *)&image);
+			onChangeJ(pos, (void *)&image);
 			setTrackbarPos("threshold","image", pos);
 			break;
 		case '.':
@@ -296,11 +318,21 @@ void setThreshold(){
 }
 
 int main(int argc, char **argv) {
+	/*
+	J threshold test
+	*/
+	//setThreshold(onChangeJ);
 
 	vector<Mat> volumeData(IMG_NUM);
 	vector<Mat> R(DIRNUMSQU, Mat(3, 3, CV_32FC1));
 	float qfuncData[H*H*H];
 	makeVolume(volumeData);
+
+	/*
+	Image binarization threshold test
+	*/
+	//setThreshold(onChangeIB);
+
 
 	directionSet dicVec(DIRNUMSQU);
 	makedirectionSet(dicVec, R);
@@ -309,14 +341,16 @@ int main(int argc, char **argv) {
 	/*
 	recover the orientation field
 	*/
-	for (int z = 100; z < IMG_NUM; z++) {
+	for (int z = 130; z < IMG_NUM; z++) {
 		cout << z << endl;
 		Mat image_dir(ROW, COL, CV_32FC3);
+		/*
+		J threshold test, J save
+		*/
 		//Mat image_den(ROW, COL, CV_32FC1);
-		bool density = 0;
 
 		#pragma omp parallel for schedule(dynamic,6)
-		for (int y = 0; y < ROW; y++) {
+		for (int y = 50; y < ROW; y++) {
 			for (int x = 0; x < COL; x++) {
 				if (volumeData[z].at<uchar>(y, x) > 0) {
 					image_dir.at<Vec3f>(y, x)[0] = 0;
@@ -324,23 +358,28 @@ int main(int argc, char **argv) {
 					image_dir.at<Vec3f>(y, x)[2] = 0;
 					continue;
 				}
-				Vec3f result = getMaxConvolution(dicVec, volumeData, Vec3i(z, y, x), qfuncData, density, R);
+				Vec3f result = getMaxConvolution(dicVec, volumeData, Vec3i(z, y, x), qfuncData, R);
 				
-				image_dir.at<Vec3f>(y, x)[0] = result[1] * 255;//b - x(col)
-				image_dir.at<Vec3f>(y, x)[1] = result[2] * 255;//g - y(row)
+				image_dir.at<Vec3f>(y, x)[0] = result[2] * 255;//b - x(col)
+				image_dir.at<Vec3f>(y, x)[1] = result[1] * 255;//g - y(row)
 				image_dir.at<Vec3f>(y, x)[2] = result[0] * 255;//r - z(depth)
 								
 				/*
-				J threshold test
+				J threshold test, J save
 				*/
-				//image_den.at<float>(y,x) = getJvalue(dicVec, volumeData, Vec3i(z, y, x), qfuncData, density, R);
+				//image_den.at<float>(y,x) = getJvalue(dicVec, volumeData, Vec3i(z, y, x), qfuncData,  R);
 			}
 
 			if (y % 10 == 0) {
 				cout << y << endl;
-				imwrite("-8.3 " + format("%d.jpg", z), image_dir);
+				imwrite("-8.3_doubleH " + format("%d.jpg", z), image_dir);
+				/*
+				J threshold test, J save
+				*/
+				//imwrite(fileLocate + "test.exr", image_den);
 			}
 		}
+		imwrite("-8.3_doubleH " + format("%d.exr", z), image_dir);
 		image_dir.release();
 	}
 
