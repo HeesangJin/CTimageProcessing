@@ -227,7 +227,6 @@ Vec3f getMaxConvolution(const directionSet &d, const vector<Mat> &volume, const 
 						float q_func = q[p_z*h2 + p_y*H + p_x];
 						j += q_func;
 					}
-
 				}
 			}
 		}
@@ -237,7 +236,6 @@ Vec3f getMaxConvolution(const directionSet &d, const vector<Mat> &volume, const 
 			result = d[i];
 		}
 	}
-
 	if (maxValue < JTHRESHOLD) {
 		return Vec3f(0, 0, 0);
 	}
@@ -311,7 +309,7 @@ int main(int argc, char **argv) {
 	/*
 	recover the orientation field
 	*/
-	for (int z = 30; z < IMG_NUM; z++) {
+	for (int z = 100; z < IMG_NUM; z++) {
 		cout << z << endl;
 		Mat image_dir(ROW, COL, CV_32FC3);
 		//Mat image_den(ROW, COL, CV_32FC1);
@@ -328,8 +326,8 @@ int main(int argc, char **argv) {
 				}
 				Vec3f result = getMaxConvolution(dicVec, volumeData, Vec3i(z, y, x), qfuncData, density, R);
 				
-				image_dir.at<Vec3f>(y, x)[0] = result[2] * 255;//b - x(row)
-				image_dir.at<Vec3f>(y, x)[1] = result[1] * 255;//g - y(col)
+				image_dir.at<Vec3f>(y, x)[0] = result[1] * 255;//b - x(col)
+				image_dir.at<Vec3f>(y, x)[1] = result[2] * 255;//g - y(row)
 				image_dir.at<Vec3f>(y, x)[2] = result[0] * 255;//r - z(depth)
 								
 				/*
