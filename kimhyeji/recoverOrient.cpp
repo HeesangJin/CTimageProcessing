@@ -8,8 +8,8 @@
 #define ROW 505//1010
 #define COL 494 //988
 #define IMG_NUM 495 //990
-#define H 25 //H = (filter size * H_DIV) + 1 
-#define H_DIV 2
+#define H 13 //H = (filter size * H_DIV) + 1 
+#define H_DIV 1
 #define DIRNUM 12
 #define DIRNUMSQU 122 // DIRNUM * DIRNUM - (2 * DIRNUM-1)
 #define JTHRESHOLD -8.3
@@ -28,6 +28,73 @@ string fileLocate = "C:\\Users\\kimhyeji\\Desktop\\UCI\\project\\Pramook_black_v
 
 
 /*
+check keyboard input,
+change the J threshold
+*/
+void onChangeJ(int pos, void *user) {
+
+	Mat image = ((Mat*)user)[0];
+	Mat test(ROW, COL, CV_8UC1);
+	float threshold = pos * -0.1;
+	for (int i = 0; i < 494; i++) {
+		for (int j = 0; j < 505; j++) {
+			if (image.at<float>(i, j) > threshold)
+				test.at<uchar>(i, j) = 255;
+			else test.at<uchar>(i, j) = 0;
+		}
+	}
+	cout << threshold << endl;
+	imshow("image", test);
+}
+
+/*
+check keyboard input,
+change the J threshold
+*/
+void onChangeIB(int pos, void *user) {
+
+	Mat image = ((Mat*)user)[0];
+	Mat test(ROW, COL, CV_8UC1);
+	float thresh = pos * 0.01;
+	threshold(image, test, thresh, 1, THRESH_BINARY_INV);
+	cout << thresh << endl;
+	imshow("image", test);
+}
+
+/*
+set J threshold with allow keys
+threshold = pos * -0.1
+-8.2
+*/
+
+void setThreshold(void(*onChange)(int, void *), Mat image = imread(fileLocate + "test.exr", CV_LOAD_IMAGE_UNCHANGED)) {
+	int pos = 100;
+
+	imshow("image", image);
+	onChange(pos, (void *)&image);
+	createTrackbar("threshold", "image", &pos, 255, onChange, (void*)&image);
+	while (1) {
+		int Key = waitKeyEx();
+		if (Key == 2490368) break;
+		switch (Key) {
+		case 2424832:
+			pos--;
+			onChange(pos, (void *)&image);
+			setTrackbarPos("threshold", "image", pos);
+			break;
+		case 2555904:
+			pos++;
+			onChange(pos, (void *)&image);
+			setTrackbarPos("threshold", "image", pos);
+			break;
+		}
+		if (pos < 0 || pos > 255) pos = 0;
+	}
+
+}
+
+
+/*
 open image files and store to 3D volume with Image Data
 */
 void makeVolumeWithImage(vector<Mat> &v) {
@@ -40,8 +107,8 @@ void makeVolumeWithImage(vector<Mat> &v) {
 		threshold(img, img, 0.64, 1, THRESH_BINARY_INV);
 		img.convertTo(img, CV_8U, 255, 0);
 		v[i - 1] = img;
-		imshow("img", img);
-		waitKey(0);
+		//imshow("img", img);
+		//waitKey(0);
 		img.release();
 	}
 }
@@ -71,11 +138,17 @@ void makeVolume(vector<Mat> &v) {
 
 		for (int y = 0; y < ROW; y++) {
 			for (int x = 0; x < COL; x++) {
-			img.at<float>(y, x) = findData(data, { x,y,i });
+				img.at<float>(y, x) = findData(data, { x,y,i });
 			}
 		}
+		/*
+		Image binarization threshold test
+		*/
+		//setThreshold(onChangeIB, img);
 		threshold(img, img, 0.55, 1, THRESH_BINARY_INV);
 		img.convertTo(img, CV_8U, 255, 0);
+		//imshow("img", img);
+		//waitKey(0);
 		v[i] = img;
 		img.release();
 	}
@@ -86,13 +159,13 @@ get rotation matrix
 z,y,x
 using spherical coordinate angles(theta, delta)
 t = 2PAI - theta
-d = delta - 1/2*PAI 
+d = delta - 1/2*PAI
 */
 Mat rotationMatrix(float d, float cosT) {
 	float sinT = sin(acos(cosT));
 
 	Mat XR = (Mat_<float>(3, 3) <<
-		cosT,0, -sinT,
+		cosT, 0, -sinT,
 		0, 1, 0,
 		sinT, 0, cosT
 		);
@@ -142,7 +215,7 @@ void saveDistance(float(&saveData)[H*H*H], const directionSet &d, vector<Mat> &R
 	for (int p_z = 0; p_z < H; p_z++) {
 		for (int p_y = 0; p_y < H; p_y++) {
 			for (int p_x = 0; p_x < H; p_x++) {
-				float dist = getDistance(Vec3f(1, 0, 0), Vec3f((p_z - h_half)/H_DIV, (p_y - h_half)/ H_DIV, (p_x - h_half)/ H_DIV));
+				float dist = getDistance(Vec3f(1, 0, 0), Vec3f((p_z - h_half) / H_DIV, (p_y - h_half) / H_DIV, (p_x - h_half) / H_DIV));
 				float pow_dist = dist * dist;
 				float q_func = -2 * exp(-s * pow_dist) + exp(-t * pow_dist);
 				saveData[p_z*h2 + p_y*H + p_x] = q_func;
@@ -165,13 +238,13 @@ float getJvalue(const directionSet &d, const vector<Mat> &volume, const Vec3i &v
 	for (int i = 0; i < DIRNUMSQU; i++) {
 		float j = 0;
 		for (int p_z = 0; p_z < H; p_z++) {
-			if (z + p_z/ H_DIV >= IMG_NUM) continue;
+			if (z + p_z / H_DIV >= IMG_NUM) continue;
 			for (int p_y = 0; p_y < H; p_y++) {
-				if (y + p_y/ H_DIV >= ROW) continue;
+				if (y + p_y / H_DIV >= ROW) continue;
 				for (int p_x = 0; p_x < H; p_x++) {
-					if (x + p_x/ H_DIV >= COL) continue;
+					if (x + p_x / H_DIV >= COL) continue;
 					Mat x_vec = (Mat_<float>(3, 1) <<
-						(p_z - h_half)/ H_DIV, (p_y - h_half)/ H_DIV, (p_x - h_half)/ H_DIV);
+						(p_z - h_half) / H_DIV, (p_y - h_half) / H_DIV, (p_x - h_half) / H_DIV);
 					Mat p = R[i] * x_vec;
 
 					//보간해야해 보간 으아악
@@ -212,13 +285,13 @@ Vec3f getMaxConvolution(const directionSet &d, const vector<Mat> &volume, const 
 	for (int i = 0; i < DIRNUMSQU; i++) {
 		float j = 0;
 		for (int p_z = 0; p_z < H; p_z++) {
-			if (z + p_z/ H_DIV >= IMG_NUM) continue;
+			if (z + p_z / H_DIV >= IMG_NUM) continue;
 			for (int p_y = 0; p_y < H; p_y++) {
-				if (y + p_y/ H_DIV >= ROW) continue;
+				if (y + p_y / H_DIV >= ROW) continue;
 				for (int p_x = 0; p_x < H; p_x++) {
-					if (x + p_x/ H_DIV >= COL) continue;
+					if (x + p_x / H_DIV >= COL) continue;
 					Mat x_vec = (Mat_<float>(3, 1) <<
-						(p_z - h_half)/ H_DIV, (p_y - h_half)/ H_DIV,( p_x - h_half)/ H_DIV);
+						(p_z - h_half) / H_DIV, (p_y - h_half) / H_DIV, (p_x - h_half) / H_DIV);
 					Mat p = R[i] * x_vec;
 					int v_z = int(z + p.at<float>(0, 0) + 0.5);
 					int v_y = int(y + p.at<float>(1, 0) + 0.5);
@@ -244,104 +317,23 @@ Vec3f getMaxConvolution(const directionSet &d, const vector<Mat> &volume, const 
 	return result;
 }
 
-/*
-check keyboard input,
-change the J threshold
-*/
-void onChangeJ(int pos, void *user){
-
-	Mat image = ((Mat*)user)[0];
-	Mat test(ROW, COL, CV_8UC1);
-	float threshold = pos * -0.1;
-	for (int i = 0; i < 494; i++) {
-		for (int j = 0; j < 505; j++) {
-			if (image.at<float>(i, j) > threshold)
-				test.at<uchar>(i, j) = 255;
-			else test.at<uchar>(i, j) = 0;
-		}
-	}
-	cout << threshold << endl;
-	imshow("image", test);
-}
-
-/*
-check keyboard input,
-change the J threshold
-*/
-void onChangeIB(int pos, void *user) {
-
-	Mat image = ((Mat*)user)[0];
-	Mat test(ROW, COL, CV_8UC1);
-	float threshold = pos/255;
-	for (int i = 0; i < 494; i++) {
-		for (int j = 0; j < 505; j++) {
-			if (image.at<float>(i, j) > threshold)
-				test.at<uchar>(i, j) = 255;
-			else test.at<uchar>(i, j) = 0;
-		}
-	}
-	cout << threshold << endl;
-	imshow("image", test);
-}
-
-/*
-set J threshold with ,(-) .(+) keys
-threshold = pos * -0.1
--8.2
-*/
-void setThreshold(void (*onChange)(int, void *)){
-
-	Mat image = imread(fileLocate + "test.exr", CV_LOAD_IMAGE_UNCHANGED);
-	int pos = 100;
-
-	imshow("image", image);
-	onChange(pos, (void *)&image);
-	createTrackbar("threshold", "image", &pos, 255, onChange, (void*)&image);
-	while (1) {
-		char Key = (char)waitKey();
-		if (Key == 27) break;
-		switch (Key) {
-		case ',':
-			pos--;
-			onChangeJ(pos, (void *)&image);
-			setTrackbarPos("threshold","image", pos);
-			break;
-		case '.':
-			pos++;
-			onChange(pos, (void *)&image);
-			setTrackbarPos("threshold", "image", pos);
-			break;
-		}
-		if (pos < 0 || pos > 255) pos = 0;
-	}
-
-}
-
 int main(int argc, char **argv) {
 	/*
 	J threshold test
 	*/
 	//setThreshold(onChangeJ);
-
 	vector<Mat> volumeData(IMG_NUM);
 	vector<Mat> R(DIRNUMSQU, Mat(3, 3, CV_32FC1));
 	float qfuncData[H*H*H];
+
 	makeVolume(volumeData);
-
-	/*
-	Image binarization threshold test
-	*/
-	//setThreshold(onChangeIB);
-
 
 	directionSet dicVec(DIRNUMSQU);
 	makedirectionSet(dicVec, R);
 	saveDistance(qfuncData, dicVec, R);
 
-	/*
-	recover the orientation field
-	*/
-	for (int z = 130; z < IMG_NUM; z++) {
+	//recover the orientation field	
+	for (int z = 30; z < IMG_NUM; z++) {
 		cout << z << endl;
 		Mat image_dir(ROW, COL, CV_32FC3);
 		/*
@@ -349,8 +341,8 @@ int main(int argc, char **argv) {
 		*/
 		//Mat image_den(ROW, COL, CV_32FC1);
 
-		#pragma omp parallel for schedule(dynamic,6)
-		for (int y = 50; y < ROW; y++) {
+#pragma omp parallel for schedule(dynamic,6)
+		for (int y = 0; y < ROW; y++) {
 			for (int x = 0; x < COL; x++) {
 				if (volumeData[z].at<uchar>(y, x) > 0) {
 					image_dir.at<Vec3f>(y, x)[0] = 0;
@@ -359,11 +351,11 @@ int main(int argc, char **argv) {
 					continue;
 				}
 				Vec3f result = getMaxConvolution(dicVec, volumeData, Vec3i(z, y, x), qfuncData, R);
-				
+
 				image_dir.at<Vec3f>(y, x)[0] = result[2] * 255;//b - x(col)
 				image_dir.at<Vec3f>(y, x)[1] = result[1] * 255;//g - y(row)
 				image_dir.at<Vec3f>(y, x)[2] = result[0] * 255;//r - z(depth)
-								
+
 				/*
 				J threshold test, J save
 				*/
@@ -379,7 +371,7 @@ int main(int argc, char **argv) {
 				//imwrite(fileLocate + "test.exr", image_den);
 			}
 		}
-		imwrite("-8.3_doubleH " + format("%d.exr", z), image_dir);
+		imwrite("-8.3 " + format("%d.exr", z), image_dir);
 		image_dir.release();
 	}
 
