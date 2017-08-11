@@ -24,5 +24,6 @@ void readHeader(unsigned char* buff);
 void readData(vector<float> &data, FILE *fp_sour, int channels);
 void printData(vector<float> &data);
 float findData(vector<float> &data, Point pos);
+Point findRgbData(vector<float> &data, Point pos);
 
 #endif

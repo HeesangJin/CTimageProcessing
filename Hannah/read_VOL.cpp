@@ -120,3 +120,22 @@ float findData(vector<float> &data, Point pos) {
 	float lookupData = data[lookupValue];
 	return lookupData;
 }
+
+Point findRgbData(vector<float> &data, Point pos) {
+
+	/***********************************************************
+	data[((zpos*yres + ypos)*xres + xpos)*channels + chan]
+	where (xpos, ypos, zpos, chan) denotes the lookup location.
+	************************************************************/
+
+	int lookupValue = ((pos.z*sy + pos.y)*sx + pos.x)*channels + chan;
+	//cout << "(x,y,z) : " << "(" << pos.x << ", " << pos.y << ", " << pos.z << ")" << endl;
+	//cout << "lookup value : " << lookupValue << endl;
+	//cout << "Find data[" << lookupValue << "] : " << data[lookupValue] << endl;
+	Point rgbData;
+	rgbData.x = data[lookupValue]; //r
+	rgbData.y = data[lookupValue + 1]; //g
+	rgbData.z = data[lookupValue + 2]; //b
+
+	return rgbData;
+}
