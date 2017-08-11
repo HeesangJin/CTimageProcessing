@@ -9,6 +9,7 @@
 #include<vector>
 
 extern int sx, sy, sz;
+extern int channels;
 
 using namespace std;
 typedef struct {
@@ -17,9 +18,10 @@ typedef struct {
 	int z;
 }Point;
 
+
 float bytesToFloat(unsigned char b0, unsigned char b1, unsigned char b2, unsigned char b3);
 void readHeader(unsigned char* buff);
-void readData(vector<float> &data, FILE *fp_sour);
+void readData(vector<float> &data, FILE *fp_sour, int channels);
 void printData(vector<float> &data);
 float findData(vector<float> &data, Point pos);
 
