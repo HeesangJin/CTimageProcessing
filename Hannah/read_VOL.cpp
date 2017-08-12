@@ -1,6 +1,7 @@
 ﻿#include "read_VOL.h"
 
 
+
 int chan = 0;
 int final;
 int channels = 0;
@@ -106,7 +107,7 @@ void printData(vector<float> &data) {
 	}
 }
 
-float findData(vector<float> &data, Point pos) {
+float findData(vector<float> &data, Point3i pos) {
 
 	/***********************************************************
 	data[((zpos*yres + ypos)*xres + xpos)*channels + chan]
@@ -121,7 +122,7 @@ float findData(vector<float> &data, Point pos) {
 	return lookupData;
 }
 
-Point findRgbData(vector<float> &data, Point pos) {
+Point3i findRgbData(vector<float> &data, Point3i pos) {
 
 	/***********************************************************
 	data[((zpos*yres + ypos)*xres + xpos)*channels + chan]
@@ -132,10 +133,10 @@ Point findRgbData(vector<float> &data, Point pos) {
 	//cout << "(x,y,z) : " << "(" << pos.x << ", " << pos.y << ", " << pos.z << ")" << endl;
 	//cout << "lookup value : " << lookupValue << endl;
 	//cout << "Find data[" << lookupValue << "] : " << data[lookupValue] << endl;
-	Point rgbData;
-	rgbData.x = data[lookupValue]; //r
-	rgbData.y = data[lookupValue + 1]; //g
-	rgbData.z = data[lookupValue + 2]; //b
+	Point3i rgbData;
+	rgbData.x = (int)(data[lookupValue]*255); //r
+	rgbData.y = (int)(data[lookupValue + 1]*255); //g
+	rgbData.z = (int)(data[lookupValue + 2]*255); //b
 
 	return rgbData;
 }
