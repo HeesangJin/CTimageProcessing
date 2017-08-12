@@ -4,8 +4,9 @@
 int chan = 0;
 int final;
 int channels = 0;
-int idx = 0;
+int idx;
 int sx = 0, sy = 0, sz = 0;
+
 
 float bytesToFloat(unsigned char b0, unsigned char b1, unsigned char b2, unsigned char b3) //little endian
 {
@@ -18,9 +19,9 @@ float bytesToFloat(unsigned char b0, unsigned char b1, unsigned char b2, unsigne
 }
 
 void readHeader(unsigned char* buff) {
-
+	
 	//print VOL
-	for (; idx<3; idx++)	printf("%d: %c\n", idx + 1, buff[idx]);
+	for (idx = 0; idx<3; idx++)	printf("%d: %c\n", idx + 1, buff[idx]);
 
 	printf("File format version : %d\n", buff[idx++]);
 
@@ -82,20 +83,20 @@ void readHeader(unsigned char* buff) {
 	cout << "max z : " << floatNum << endl;
 }
 
-void readData(vector<float> &data, FILE *fp_sour) {
+void readData(vector<float> &data, FILE *fp_sour, int channels) {
 	int dataIdx = 0;
 
 	size_t n_count = 0;
-	n_count = fread(&data[dataIdx], sizeof(float), sx*sy*sz, fp_sour); // sx*sy*sz * sizeof(float)
+	n_count = fread(&data[dataIdx], sizeof(float), sx*sy*sz*channels, fp_sour); // sx*sy*sz * sizeof(float)
 	cout << "n_count : " << n_count << endl;
-	cout << "sx*sy*sz : " << sx*sy*sz << endl;
-	if (n_count != sx*sy*sz)
+	cout << "sx*sy*sz*channels : " << sx*sy*sz*channels << endl;
+	if (n_count != sx*sy*sz*channels)
 	{
 		fputs("Reading error", stderr);
 		exit(3);
 	}
 
-	cout << "data size: " << data.size() << endl;
+	cout << "data size: " << data.size() << endl<<endl;
 }
 
 void printData(vector<float> &data) {
@@ -118,4 +119,23 @@ float findData(vector<float> &data, Point pos) {
 	//cout << "Find data[" << lookupValue << "] : " << data[lookupValue] << endl;
 	float lookupData = data[lookupValue];
 	return lookupData;
+}
+
+Point findRgbData(vector<float> &data, Point pos) {
+
+	/***********************************************************
+	data[((zpos*yres + ypos)*xres + xpos)*channels + chan]
+	where (xpos, ypos, zpos, chan) denotes the lookup location.
+	************************************************************/
+
+	int lookupValue = ((pos.z*sy + pos.y)*sx + pos.x)*channels + chan;
+	//cout << "(x,y,z) : " << "(" << pos.x << ", " << pos.y << ", " << pos.z << ")" << endl;
+	//cout << "lookup value : " << lookupValue << endl;
+	//cout << "Find data[" << lookupValue << "] : " << data[lookupValue] << endl;
+	Point rgbData;
+	rgbData.x = data[lookupValue]; //r
+	rgbData.y = data[lookupValue + 1]; //g
+	rgbData.z = data[lookupValue + 2]; //b
+
+	return rgbData;
 }
