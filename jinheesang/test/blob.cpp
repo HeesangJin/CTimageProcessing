@@ -68,13 +68,39 @@ void makeBlobMat(Mat &im, Mat &im_with_keypoints){
 	}
 }
 
+string type2str(int type) {
+    string r;
+    
+    uchar depth = type & CV_MAT_DEPTH_MASK;
+    uchar chans = 1 + (type >> CV_CN_SHIFT);
+    
+    switch ( depth ) {
+        case CV_8U:  r = "8U"; break;
+        case CV_8S:  r = "8S"; break;
+        case CV_16U: r = "16U"; break;
+        case CV_16S: r = "16S"; break;
+        case CV_32S: r = "32S"; break;
+        case CV_32F: r = "32F"; break;
+        case CV_64F: r = "64F"; break;
+        default:     r = "User"; break;
+    }
+    
+    r += "C";
+    r += (chans+'0');
+    
+    return r;
+}
+
 int main( int argc, char** argv )
 {
 
 	// Read image
 	Mat im = imread( "blob.jpg", IMREAD_GRAYSCALE );
+
+	cout << "input type: " << type2str(im.type()) << endl;
 	Mat im_with_keypoints;
 	makeBlobMat(im, im_with_keypoints);
+	cout << "blob type: " << type2str(im_with_keypoints.type()) << endl;
 
 	// Show blobs
 	imshow("keypoints", im_with_keypoints );

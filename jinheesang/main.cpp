@@ -12,8 +12,8 @@
 #include <climits>
 #include <ctime>
 
-#include "opencv2/opencv.hpp"
 #include "read_VOL.h"
+#include "opencv2/opencv.hpp"
 
 #define NUM_PLANES 150
 float EPSILON_D = 0.55;
@@ -21,6 +21,7 @@ int EPSILON_D_BASE = 0;
 float EPSILON_J = -1;
 int EPSILON_J_BASE = 0;
 float EPSILON_I = 0.7;
+int EPSILON_I_BASE = 0;
 
 #define N_THETA 12
 #define N_Z 10
@@ -28,9 +29,6 @@ float EPSILON_I = 0.7;
 
 #define VALUE_S 3
 #define VALUE_T 4
-char* fileLocationCH1 = "C:\\UCI\\Pramook_black_velvet_3.03um_80kV_down\\Pramook_black_velvet_3.03um_80kV_down.vol";
-char* fileLocationCH3 = "C:\\UCI\\3-2_dir_down.vol";
-
 
 typedef struct{
     float x;
@@ -67,6 +65,29 @@ void readNextInput(int curFileNum, cv::Mat &mat, vector<float> &data) {
     //cout << mat.rows << " ," << mat.cols << endl;
 }
 
+void readNextInputCH3(int curFileNum, cv::Mat &mat, vector<float> &data);
+void readNextInputCH3(int curFileNum, cv::Mat &mat, vector<float> &data) {
+    cv::Mat input(sy, sx, CV_32FC3);
+
+    //read image
+    for (int i = 0; i < sy; i++) {
+        for (int j = 0; j < sx; j++) {
+            cv::Point3i position;
+            position.x = j;
+            position.y = i;
+            position.z = curFileNum;
+            cv::Point3i rgbData;
+            rgbData = findRgbData(data, position);
+            input.at<cv::Vec3f>(i, j)[0] = (float)rgbData.x; // r
+            input.at<cv::Vec3f>(i, j)[1] = (float)rgbData.y; // g
+            input.at<cv::Vec3f>(i, j)[2] = (float)rgbData.z; // b
+        }
+    }
+    mat = input;
+
+    cout << curFileNum <<" Image dimensions = "<< mat.size() << endl;
+    //cout << mat.rows << " ," << mat.cols << endl;
+}
 
 string type2str(int type) {
     string r;
@@ -585,6 +606,84 @@ void showDotSingleValue(cv::Mat &mat, int row, int col){
     cout << " Value: " << mat.at<float>(i,j) << endl;
 }
 
+void makeBlobMat(cv::Mat &im, cv::Mat &im_with_keypoints){
+    // Setup SimpleBlobDetector parameters.
+    cv::SimpleBlobDetector::Params params;
+
+    // Change thresholds
+    params.minThreshold = 10;
+    params.maxThreshold = 200;
+
+    // Filter by Area.
+    params.filterByArea = true;
+    params.minArea = 15;
+    //params.maxArea = 1500;
+
+    // Filter by Circularity
+    params.filterByCircularity = true;
+    params.minCircularity = 0.1;
+
+    // Filter by Convexity
+    params.filterByConvexity = true;
+    params.minConvexity = 0.87;
+
+    // Filter by Inertia
+    params.filterByInertia = true;
+    params.minInertiaRatio = 0.01;
+
+
+    // Storage for blobs
+    vector<cv::KeyPoint> keypoints;
+
+
+#if CV_MAJOR_VERSION < 3   // If you are using OpenCV 2
+
+    // Set up detector with params
+    cv::SimpleBlobDetector detector(params);
+
+    // Detect blobs
+    detector.detect( im, keypoints);
+#else 
+
+    // Set up detector with params
+    Ptr<SimpleBlobDetector> detector = SimpleBlobDetector::create(params);   
+
+    // Detect blobs
+    detector->detect( im, keypoints);
+#endif 
+
+    // Draw detected blobs as red circles.
+    // DrawMatchesFlags::DRAW_RICH_KEYPOINTS flag ensures
+    // the size of the circle corresponds to the size of blob
+
+    drawKeypoints( im, keypoints, im_with_keypoints, cv::Scalar(0,0,255), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS );
+
+    //print center of each blobs
+    cout << "Number of blob: " << (int)keypoints.size() << endl;
+    for(int i=0; i<(int)keypoints.size(); i++){
+        cout << i << " center: (i:" << keypoints[i].pt.x << ", j: " << keypoints[i].pt.y << ")"<<endl;
+    }
+}
+
+void makeIx(cv::Mat &matSubX, cv::Mat &matIx);
+void makeIx(cv::Mat &matSubX, cv::Mat &matIx){
+
+    for(int iy=0; iy<sy; iy++){ // y
+        for(int iz=0; iz<sz; iz++){ // z
+            float dirx = matSubX.at<cv::Vec3b>(iz,iy)[0];
+
+            //cout << "makeIx(): " << dirx/255 << endl;
+            if(dirx/255 > EPSILON_I){
+                matIx.at<unsigned char>(iz,iy) = (unsigned char)0; //y, z. 1 by paper
+            }
+            else{
+                matIx.at<unsigned char>(iz,iy) = (unsigned char)255; //y, z. 0 by paper
+            }
+
+        }
+    }
+}
+
 void changeEpsilonD(int pos, void *param)
 {
     cv::Mat &mat = *(cv::Mat*)param;
@@ -597,8 +696,7 @@ void changeEpsilonD(int pos, void *param)
     imshow("Hello OpenCV", matFx);
 }
 
-void changeEpsilonJ(int pos, void *param)
-{
+void changeEpsilonJ(int pos, void *param){
     cv::Mat **mats = (cv::Mat**)malloc(sizeof(cv::Mat*) * 3);
     
     mats = (cv::Mat**)param;
@@ -614,35 +712,55 @@ void changeEpsilonJ(int pos, void *param)
     imshow("Hello OpenCV", matCT);
 }
 
-void divideSubVolumeX(vector<cv::Mat> &matDir, vector<cv::Mat> &matIX);
-void divideSubVolumeX(vector<cv::Mat> &matDir, vector<cv::Mat> &matIX){
-    
-    for(int ix=0; ix<COLS; ix++){ // x
-        cv::Mat planeYZ = cv::Mat(ROWS, NUM_PLANES, CV_8UC1, 0); // y(rows), z(planes)
-        matSubVolumeX.push_back(planeYZ);
-        for(int iy=0; iy<ROWS; iy++){ // y
-            for(int iz=0; iz<NUM_PLANES; iz++){ // z
-                Direction direction = {matDir[iz].at<float>(iy,ix)[0], matDir[iz].at<float>(iy,ix)[1], matDir[iz].at<float>(iy,ix)[2]};
-                
-                if(calcul3DVectorAbs(direction) > EPSILON_I){
-                    matSubVolumeX[ix].at<uchar>(iy,iz) = (unsigned char)255; //y, z
-                }
-                else{
-                    matSubVolumeX[ix].at<uchar>(iy,iz) = (unsigned char)0; //y, z
-                }
-            }
-        }
-    }
+void changeEpsilonI(int pos, void *param){
+    cv::Mat &matSubX = *(cv::Mat*)param;
+    cv::Mat im_with_keypoints;
+    cv::Mat matIx = cv::Mat(sz, sy, CV_8UC1);
+    makeIx(matSubX, matIx);
+    cout << "current EPSILON_I is " << EPSILON_I << endl;
+    EPSILON_I = (float)pos/10;
+    makeBlobMat(matIx, im_with_keypoints);
+
+    imshow("Hello OpenCV", im_with_keypoints );
 }
-                   
-float calcul3DVectorAbs(Direction &direction){
+
+float calcul3dVectorAbs(Direction &direction){
     float result = 0;
+    direction.x /= 255;
+    direction.y /= 255;
+    direction.z /= 255; 
+
     result += (direction.x * direction.x);
     result += (direction.y * direction.y);
     result += (direction.z * direction.z);
     return sqrt(result);
 }
 
+void divideSubVolumeX(vector<cv::Mat> &matDir3d, vector<cv::Mat> &matSubX3d);
+void divideSubVolumeX(vector<cv::Mat> &matDir3d, vector<cv::Mat> &matSubX3d){
+    
+    //cout << "sx: " << sx << ", sy: " << sy << " sz: " << sz << endl;
+    for(int ix=0; ix<sx; ix++){ // x
+        cv::Mat planeYZ = cv::Mat(sz, sy, CV_8UC3); // y(rows), z(planes)
+        matSubX3d.push_back(planeYZ);
+
+        for(int iy=0; iy<sy; iy++){ // y
+            for(int iz=0; iz<sz; iz++){ // z
+                unsigned char dirx = (int)matDir3d[iz].at<cv::Vec3f>(iy,ix)[0];
+                unsigned char diry = (int)matDir3d[iz].at<cv::Vec3f>(iy,ix)[1];
+                unsigned char dirz = (int)matDir3d[iz].at<cv::Vec3f>(iy,ix)[2];
+
+                if(diry > dirx || dirz > dirx) // dirx is biggest
+                    continue;
+
+                matSubX3d[ix].at<cv::Vec3b>(iz,iy)[0] =  dirx;
+                matSubX3d[ix].at<cv::Vec3b>(iz,iy)[1] =  diry;
+                matSubX3d[ix].at<cv::Vec3b>(iz,iy)[2] =  dirz;
+            }
+        }
+        cout << "dividing.. " << ix << "/" << sx << endl;
+    }
+}
 
 int main(int argc, const char * argv[]){
     clock_t begin = clock();
@@ -667,7 +785,7 @@ int main(int argc, const char * argv[]){
 //
 //    ///////////////////////////////////////////////////////
 //
-//    string windowName = "Hello OpenCV";
+    string windowName = "Hello OpenCV";
 //    cv::Mat mat, matFx, matDir, matDensity ,matCT, matJ;
 //    
 //    
@@ -793,37 +911,69 @@ int main(int argc, const char * argv[]){
     //setTrackbarPos("max threahold", windowName, -10);
     //=============== Track Bar
     
-    cv::imshow(windowName, matDir);
-    cv::waitKey(0);
+    // cv::imshow(windowName, matDir);
+    // cv::waitKey(0);
     
-    cv::Mat *mats[3] = {&mat, &matFx, &matJ};
-    cv::imshow(windowName, matCT);
-    cv::createTrackbar("threahold J", windowName, &EPSILON_J_BASE, 100, changeEpsilonJ, (void*)mats);
-    cv::setTrackbarPos("threahold J", windowName, 5);
-    cv::waitKey(0);
+    // cv::Mat *mats[3] = {&mat, &matFx, &matJ};
+    // cv::imshow(windowName, matCT);
+    // cv::createTrackbar("threahold J", windowName, &EPSILON_J_BASE, 100, changeEpsilonJ, (void*)mats);
+    // cv::setTrackbarPos("threahold J", windowName, 5);
+    // cv::waitKey(0);
     
     //    }
     
-    
+    // >>>>> Step2 <<<<<
     /////////////////////////////////////////////// read_VOL_CH3
     FILE    *fp_sour2;
     unsigned char buff2[48]; //48byte
     size_t   n_size2;
-    
-    fp_sour2 = fopen(fileLocationCH3, "rb");
+
+    fp_sour2 = fopen("./3-2_dir_down.vol", "rb");
     n_size2 = fread(buff2, 1, 48, fp_sour2);
-    
+
     readHeader(buff2);
-    
+
     vector<float> data3CH(((((long long)sx)*sy)*sz)*channels);
     readData(data3CH, fp_sour2, channels);
-    
     //printData(data3CH);
-    
+
     fclose(fp_sour2);
     //////////////////////////////////////////////
+
+    // vector<cv::Mat> matDir3d  from HN
+    vector<cv::Mat> matDir3d;
+    for (int curFileNum = 0; curFileNum < sz; curFileNum++) {
+        //  //read input image
+        cv::Mat matCH3;
+        readNextInputCH3(curFileNum, matCH3, data3CH);
+        //imshow("matCH3 image", matCH3);
+        //cv::waitKey(0);
+        matDir3d.push_back(matCH3);
+    }
+    //////////////////////////////////////////////
     
+    // divide to 3sub Volumes
+    vector<cv::Mat> matIx3d, matSubX3d;
+    divideSubVolumeX(matDir3d, matSubX3d); // (dir -> subX)
+
+    for(int i=0; i<(int)matSubX3d.size(); i++){
+
+        cv::Mat IxplaneYZ = cv::Mat(sz, sy, CV_8UC1); // y(rows), z(planes)
+        
+        makeIx(matSubX3d[i], IxplaneYZ); // (subX -> Ix)
+        matIx3d.push_back(IxplaneYZ);
+    }
     
+    for(int i=0; i<(int)matIx3d.size(); i++){
+        cv::Mat im_with_keypoints;
+        cout << "current Image: X voxel " << i << endl;
+        makeBlobMat(matIx3d[i], im_with_keypoints); // (Ix -> blobs)
+        
+        // Show blobs
+        imshow(windowName, im_with_keypoints );
+        cv::createTrackbar("threahold I", windowName, &EPSILON_I_BASE, 10, changeEpsilonI, (void*)&matSubX3d[i]);
+        cv::waitKey(0);
+    }    
     return 0;
 }
 
