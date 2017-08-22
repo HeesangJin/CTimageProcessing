@@ -1,9 +1,9 @@
-# CTimageProcessing
+# CT Image Processing
 ## Introduction
 This program is a program for processing CT images.
-The implementation theory is summarized in Extracting Useful Information from Micro-CT Scans of Fibrous Materials.
+The implementation theory is summarized in [Extracting Useful Information from Micro-CT Scans of Fibrous Materials](https://docs.google.com/document/d/1FjNlIMDw6YfSsXTjEeH_J_jAGW18SJfaIc1ORs6XoBc/edit).
 This program covers Step.0 ~ Step.3 of the above paper.
-The program for Step.4 ~ Step.6 is here<Link>.
+The program for Step.4 ~ Step.6 is [here](https://github.com/HeesangJin/CTimageProcessing/tree/master/kimhyeji)
 
 
 ## Input
@@ -49,7 +49,6 @@ This project contains four files:
 
 You also need the following VOL files:
 1. Pramook_black_velvet_3.03um_80kV_down.vol
-<Link>
 
 The above five files must be in the same directory.
 
