@@ -70,9 +70,9 @@ Valid values ​​for TYPE and IMAGE_NUMBER are:
 
 1. 'o': Output Original CT Image.
 
-2. 'b': Binary CT Image is output.
+2. 'b': Output Binary CT Image.
 
-3. 's': Original, Binary Omits the CT Images output.
+3. 's': Omits Original, Binary CT Images.
 
 <Note> Direction RGB Image, Cleaned CT Image are always printed.
 
