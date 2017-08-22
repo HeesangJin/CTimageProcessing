@@ -16,15 +16,15 @@
 #include "opencv2/opencv.hpp"
 
 #define NUM_PLANES 150
-float EPSILON_D = 0.55;
+float EPSILON_D = 0.53;
 int EPSILON_D_BASE = 0;
 float EPSILON_J = -1;
 int EPSILON_J_BASE = 0;
 float EPSILON_I = 0.7;
 int EPSILON_I_BASE = 0;
 
-#define N_THETA 12
-#define N_Z 10
+#define N_THETA 8
+#define N_Z 6
 #define LENGTH_L 6
 
 #define VALUE_S 3
@@ -616,7 +616,7 @@ void makeBlobMat(cv::Mat &im, cv::Mat &im_with_keypoints){
 
     // Filter by Area.
     params.filterByArea = true;
-    params.minArea = 15;
+    params.minArea = 5;
     //params.maxArea = 1500;
 
     // Filter by Circularity
@@ -679,7 +679,6 @@ void makeIx(cv::Mat &matSubX, cv::Mat &matIx){
             else{
                 matIx.at<unsigned char>(iz,iy) = (unsigned char)255; //y, z. 0 by paper
             }
-
         }
     }
 }
@@ -750,12 +749,17 @@ void divideSubVolumeX(vector<cv::Mat> &matDir3d, vector<cv::Mat> &matSubX3d){
                 unsigned char diry = (int)matDir3d[iz].at<cv::Vec3f>(iy,ix)[1];
                 unsigned char dirz = (int)matDir3d[iz].at<cv::Vec3f>(iy,ix)[2];
 
-                if(diry > dirx || dirz > dirx) // dirx is biggest
-                    continue;
-
-                matSubX3d[ix].at<cv::Vec3b>(iz,iy)[0] =  dirx;
-                matSubX3d[ix].at<cv::Vec3b>(iz,iy)[1] =  diry;
-                matSubX3d[ix].at<cv::Vec3b>(iz,iy)[2] =  dirz;
+                // dirx is biggest
+                if(diry > dirx || dirz > dirx){
+                    matSubX3d[ix].at<cv::Vec3b>(iz,iy)[0] = 0;
+                    matSubX3d[ix].at<cv::Vec3b>(iz,iy)[1] = 0;
+                    matSubX3d[ix].at<cv::Vec3b>(iz,iy)[2] = 0;
+                } 
+                else{
+                    matSubX3d[ix].at<cv::Vec3b>(iz,iy)[0] =  dirx;
+                    matSubX3d[ix].at<cv::Vec3b>(iz,iy)[1] =  diry;
+                    matSubX3d[ix].at<cv::Vec3b>(iz,iy)[2] =  dirz;
+                }
             }
         }
         cout << "dividing.. " << ix << "/" << sx << endl;
@@ -765,105 +769,106 @@ void divideSubVolumeX(vector<cv::Mat> &matDir3d, vector<cv::Mat> &matSubX3d){
 int main(int argc, const char * argv[]){
     clock_t begin = clock();
     
-//    //////////////////////////////////////////////////////// read VOL data
-//
-//    FILE    *fp_sour;
-//    unsigned char buff[48]; //48byte
-//    size_t   n_size;
-//
-//    fp_sour = fopen("./Pramook_black_velvet_3.03um_80kV_down.vol", "rb");
-//    n_size = fread(buff, 1, 48, fp_sour);
-//
-//    readHeader(buff);
-//
-//    vector<float> data((((long long)sx)*sy)*sz);
-//    readData(data, fp_sour);
-//
-//    //printData(data);
-//
-//    fclose(fp_sour);
-//
-//    ///////////////////////////////////////////////////////
-//
+    //////////////////////////////////////////////////////// read VOL data
+
+    FILE    *fp_sour;
+    unsigned char buff[48]; //48byte
+    size_t   n_size;
+
+    fp_sour = fopen("./Pramook_black_velvet_3.03um_80kV_down.vol", "rb");
+    n_size = fread(buff, 1, 48, fp_sour);
+
+    readHeader(buff);
+
+    vector<float> data((((long long)sx)*sy)*sz);
+    readData(data, fp_sour, 1);
+
+    //printData(data);
+
+    fclose(fp_sour);
+
+    ///////////////////////////////////////////////////////
+
     string windowName = "Hello OpenCV";
-//    cv::Mat mat, matFx, matDir, matDensity ,matCT, matJ;
-//    
-//    
-//    vector<cv::Mat> mat3d, mat3dDir;
-//    vector<Direction> setOfDirections;
-//    vector<pair<float, float> > degreesByDirections;
-//    
-//    cout << "Start processing" << endl;
-//    
-//    
-//    calculSetOfDirections(setOfDirections, degreesByDirections);
-//
-//    //showAllDirections(degreesByDirections); //debug
-//    
-//    //rotateMatrix Test
-////    Direction originalPoint = {3, 3, 3};
-////    Direction rotatedPoint = rotateMatrix(originalPoint, 1.07, 'x');
-////    rotatedPoint = rotateMatrix(rotatedPoint, 1.07, 'y');
-////    cout << "x: "<<rotatedPoint.x << ", y: " << rotatedPoint.y << ", z: " << rotatedPoint.z << endl;
-////    
-////    return 0; //debug
-//    
-//    for(int curFileNum = 0; curFileNum < NUM_PLANES; curFileNum++){
-//        //read input image
-//        readNextInput(curFileNum, mat, data);
-//        
-//        mat3d.push_back(mat);
-//        
-//        //caculate f(x)
-//        matFx = cv::Mat(mat.rows, mat.cols, CV_32F, float(0));
-//        calculFx(mat, matFx);
-//        mat3dFx.push_back(matFx);
-//        //ok
-//        
-//        //DEBUG
-//        //        cv::Mat matTest;
-//        //        matTest = cv::Mat(matFx.rows, matFx.cols, CV_8UC3, cv::Scalar(0, 0, 0));
-//        //        debugToRgb(matFx, matTest);
-//        //
-//        
-//        cv::imshow(windowName, matFx);
-//        cv::createTrackbar("threahold D", windowName, &EPSILON_D_BASE, 100, changeEpsilonD, (void*)&mat);
-//        cv::setTrackbarPos("threahold D", windowName, 55);
-//        cv::waitKey(0);
-//    }
-//    //showAllFx(mat3dFx);
-//    
-//    calculAllQs(setOfDirections);
-//    ROWS = mat.rows;
-//    COLS = mat.cols;
-//    
-//    int curFileNum = 100;
-//    //    for(int curFileNum = 0; curFileNum < NUM_PLANES; curFileNum++){
-//    
-//    mat = mat3d[curFileNum];
-//    matFx = mat3dFx[curFileNum];
-//    cout << "curFileNum: " << curFileNum << endl;
-//    
-//    // make matirx of direction
-//    Point curPoint = {0, 0, curFileNum};
-//    matDir = cv::Mat(mat.rows, mat.cols, CV_8UC3, cv::Scalar(0, 0, 0));
-//    
-//    // make matrix of Final CT values
-//    matCT = cv::Mat(matFx.rows, matFx.cols, CV_32F, float(0));
-//    
-//    // make matrix of Maximum J value of each voxel
-//    matJ = cv::Mat(matFx.rows, matFx.cols, CV_32F, float(0));
-//    
-//    // Calculating Directions
-//    calculVoxelDirection(curPoint, mat, matFx, matDir, matJ, setOfDirections, degreesByDirections);
-//    makeFinalCTmatrix(mat, matFx, matJ, matCT);
-//    
-//    mat3dDir.push_back(matDir);
-//    mat3dCT.push_back(matCT);
-//    mat3dJ.push_back(matJ);
-//    
-//    //matDensity = cv::Mat(mat.rows,mat.cols, CV_32F, float(0));
-//    //makeDensityFromDir(matDir, matDensity);
+    cv::Mat mat, matFx, matDir, matDensity ,matCT, matJ;
+
+
+    vector<cv::Mat> mat3d, mat3dDir;
+    vector<Direction> setOfDirections;
+    vector<pair<float, float> > degreesByDirections;
+
+    cout << "Start processing" << endl;
+
+
+    calculSetOfDirections(setOfDirections, degreesByDirections);
+
+    //showAllDirections(degreesByDirections); //debug
+
+    //rotateMatrix Test
+    Direction originalPoint = {3, 3, 3};
+    Direction rotatedPoint = rotateMatrix(originalPoint, 1.07, 'x');
+    rotatedPoint = rotateMatrix(rotatedPoint, 1.07, 'y');
+    cout << "x: "<<rotatedPoint.x << ", y: " << rotatedPoint.y << ", z: " << rotatedPoint.z << endl;
+
+    //return 0; //debug
+
+    for(int curFileNum = 0; curFileNum < NUM_PLANES; curFileNum++){
+       //read input image
+       readNextInput(curFileNum, mat, data);
+       //cv::imshow(windowName, mat);
+       //cv::waitKey(0);
+       mat3d.push_back(mat);
+       
+       //caculate f(x)
+       matFx = cv::Mat(mat.rows, mat.cols, CV_32F, float(0));
+       calculFx(mat, matFx);
+       mat3dFx.push_back(matFx);
+       //ok
+       
+       //DEBUG
+       //        cv::Mat matTest;
+       //        matTest = cv::Mat(matFx.rows, matFx.cols, CV_8UC3, cv::Scalar(0, 0, 0));
+       //        debugToRgb(matFx, matTest);
+       //
+       
+       // cv::imshow(windowName, matFx);
+       // cv::createTrackbar("threahold D", windowName, &EPSILON_D_BASE, 100, changeEpsilonD, (void*)&mat);
+       // cv::setTrackbarPos("threahold D", windowName, 55);
+       // cv::waitKey(0);
+   }
+   // //showAllFx(mat3dFx);
+   
+   calculAllQs(setOfDirections);
+   ROWS = mat.rows;
+   COLS = mat.cols;
+   
+   int curFileNum = 0;
+   //    for(int curFileNum = 0; curFileNum < NUM_PLANES; curFileNum++){
+   
+   mat = mat3d[curFileNum];
+   matFx = mat3dFx[curFileNum];
+   cout << "curFileNum: " << curFileNum << endl;
+   
+   // make matirx of direction
+   Point curPoint = {0, 0, curFileNum};
+   matDir = cv::Mat(mat.rows, mat.cols, CV_8UC3, cv::Scalar(0, 0, 0));
+   
+   // make matrix of Final CT values
+   matCT = cv::Mat(matFx.rows, matFx.cols, CV_32F, float(0));
+   
+   // make matrix of Maximum J value of each voxel
+   matJ = cv::Mat(matFx.rows, matFx.cols, CV_32F, float(0));
+   
+   // Calculating Directions
+   calculVoxelDirection(curPoint, mat, matFx, matDir, matJ, setOfDirections, degreesByDirections);
+   makeFinalCTmatrix(mat, matFx, matJ, matCT);
+   
+   mat3dDir.push_back(matDir);
+   mat3dCT.push_back(matCT);
+   mat3dJ.push_back(matJ);
+   
+   // matDensity = cv::Mat(mat.rows,mat.cols, CV_32F, float(0));
+   // makeDensityFromDir(matDir, matDensity);
 //    
 //    /* debug - draw lines in yellow */
 //    //drawRowLine(matDir, 100);
@@ -911,14 +916,14 @@ int main(int argc, const char * argv[]){
     //setTrackbarPos("max threahold", windowName, -10);
     //=============== Track Bar
     
-    // cv::imshow(windowName, matDir);
-    // cv::waitKey(0);
+    cv::imshow(windowName, matDir);
+    cv::waitKey(0);
     
-    // cv::Mat *mats[3] = {&mat, &matFx, &matJ};
-    // cv::imshow(windowName, matCT);
-    // cv::createTrackbar("threahold J", windowName, &EPSILON_J_BASE, 100, changeEpsilonJ, (void*)mats);
-    // cv::setTrackbarPos("threahold J", windowName, 5);
-    // cv::waitKey(0);
+    cv::Mat *mats[3] = {&mat, &matFx, &matJ};
+    cv::imshow(windowName, matCT);
+    cv::createTrackbar("threahold J", windowName, &EPSILON_J_BASE, 100, changeEpsilonJ, (void*)mats);
+    cv::setTrackbarPos("threahold J", windowName, 5);
+    cv::waitKey(0);
     
     //    }
     
