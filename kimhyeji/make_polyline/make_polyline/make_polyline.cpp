@@ -66,6 +66,8 @@ public:
 	void connectDot(const POLY &v);
 	void makePolyline();
 
+	void printDot(char* fileName);
+
 	Point3f findRgbData(Point3i pos) {
 		int lookupValue = ((pos.z*sy + pos.y)*sx + pos.x)*channels;
 		return Point3f(volume[lookupValue], volume[lookupValue + 1], volume[lookupValue + 2]); //rgb
@@ -80,10 +82,8 @@ POLYLINE::POLYLINE(char* locate, bool threshold_check_ = 1) {
 	Point3i size = saveVolume(locate, volume);
 	COL = size.x, ROW = size.y, IMGNUM = size.z;
 	threshold_blob = 0.72;
-
-	polyline.resize(IMGNUM);
-	xVol.resize(IMGNUM), yVol.resize(IMGNUM), zVol.resize(IMGNUM);
-	xBlob.resize(IMGNUM), yBlob.resize(IMGNUM), zBlob.resize(IMGNUM);
+	xVol.resize(COL), yVol.resize(ROW), zVol.resize(IMGNUM);
+	xBlob.resize(COL), yBlob.resize(ROW), zBlob.resize(IMGNUM);
 	end = clock() / CLOCKS_PER_SEC;
 	printf("finished save : %d\n", (end - begin));
 }
@@ -167,10 +167,10 @@ void POLYLINE::thresholding() {
 		zVol[k].convertTo(zVol[k], CV_8U,255,0);
 		zBlob[k] = blobDetect(zVol[k]);	
 
-		if (k % 100 == 0)  printf("%d >",k/IMGNUM*100);
+		if (k % 100 == 0)  printf(" >");
 	}
 	printf("z\n");
-	/*
+	
 	#pragma omp parallel for schedule(dynamic,6)
 	for (int k = 0; k < ROW; k++) {
 		threshold(yVol[k], yVol[k], threshold_blob, 1, CV_THRESH_BINARY);
@@ -186,17 +186,19 @@ void POLYLINE::thresholding() {
 		xBlob[k] = blobDetect(xVol[k]);
 	}
 	printf("x\n");
-	*/
+	
 }
 void POLYLINE::connectDot(const POLY &keypoints) {
+	polyline.resize(keypoints.size());
 
-	// create tree
+	// create first RT tree
 	bgi::rtree< value, bgi::quadratic<16> > RT;
 	for (unsigned i = 0; i < keypoints[0].size(); ++i) {
 		point p = point(keypoints[0][i].pt.x, keypoints[0][i].pt.y);
 		RT.insert(std::make_pair(p, i));
 	}
 	printf("make RT\n");
+
 	for (int j = 0; j < keypoints.size()-1; j++) {
 		bgi::rtree< value, bgi::quadratic<16> > nextRT;
 
@@ -209,6 +211,7 @@ void POLYLINE::connectDot(const POLY &keypoints) {
 			nextRT.insert(std::make_pair(p, i));
 			RT.query(bgi::nearest(p, 1), std::back_inserter(matchPoints));
 
+			// within 4 distance
 			if (bg::distance(p, matchPoints.back().first) > 4) matchPoints.pop_back();
 			else {
 				pointList.push_back(make_pair(keypoints[j + 1][i].pt.x, keypoints[j + 1][i].pt.y));
@@ -229,16 +232,6 @@ void POLYLINE::connectDot(const POLY &keypoints) {
 		RT = nextRT;
 		if (j % 100 == 0)  printf("%d >", j);
 	}
-	/*
-	ofstream output;
-	output.open("data.txt");
-	for (int i = 0; i < polyline.size(); i++) {
-		for (int j = 0; i < polyline[i].size(); j++) {
-			output << polyline[i][j].first.x << ' ' << polyline[i][j].first.y << ' ';
-			output << polyline[i][j].second.x << ' ' << polyline[i][j].second.y << endl;
-		}
-	}
-	*/
 }
 float POLYLINE::absData(float p) {
 	if (p < 0) p = -p;
@@ -249,13 +242,12 @@ void POLYLINE::divideVolume() {
 	clock_t begin, end;
 	begin = clock() / CLOCKS_PER_SEC;
 	//initialize
+	for (int k = 0;k < COL; k++) xVol[k] = Mat(ROW, IMGNUM, CV_32FC1, Scalar(0.0));
+	for(int k = 0; k < ROW; k++) yVol[k] = Mat(IMGNUM, COL, CV_32FC1, Scalar(0.0));
+	for(int k = 0; k < IMGNUM;k++)	zVol[k] = Mat(ROW, COL, CV_32FC1, Scalar(0.0));
+	
 	for (int k = 0;k < IMGNUM; k++) {
-		xVol[k] = Mat(ROW, IMGNUM, CV_32FC1, Scalar(0.0));
-		yVol[k] = Mat(IMGNUM, COL, CV_32FC1, Scalar(0.0));
-		zVol[k] = Mat(ROW, COL, CV_32FC1, Scalar(0.0));
-	}
-	for (int k = 0;k < IMGNUM; k++) {
-		#pragma omp parallel for schedule(dynamic,6)
+		#pragma omp parallel for schedule(dynamic,4)
 		for (int i = 0; i < ROW;i++) {
 			for (int j = 0; j < COL; j++){
 				Point3f data = findRgbData( Point3i( j,i,k ) );
@@ -283,23 +275,46 @@ void POLYLINE::makePolyline() {
 	divideVolume();
 	thresholding();
 	connectDot(zBlob);
+	printDot("zData.txt");
+	connectDot(yBlob);
+	printDot("yData.txt");
+	connectDot(xBlob);
+	printDot("xData.txt");
+
+
+
 	//connectDot(yBlob);
 
 }
 
+void POLYLINE::printDot(char * fileName) {
+
+	ofstream output;
+	output.open(fileName);
+	printf(">>%d\n", polyline.size());
+	for (int i = 0; i < polyline.size(); i++) {
+		output << i << endl;
+		printf("%d>>>%d  ", i, polyline[i].size());
+
+		for (int j = 0; j < polyline[i].size(); j++) {
+			output << polyline[i][j].first.x << ' ' << polyline[i][j].first.y << ' ';
+			output << polyline[i][j].second.x << ' ' << polyline[i][j].second.y << endl;
+		}
+	}
+}
 
 void myDisplay(void)
 {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glLoadIdentity();//load the identity matrix
-	gluLookAt(10.0f, 0.0f, 0.0f,
-		0.0f, 0.0f, -10.0f,
+	gluLookAt(100.0f, 0.0f, 0.0f,
+		0.0f, 0.0f, -100.0f,
 		0.0f, 1.0f, 0.0f);
 	glLineWidth(1.0);
 	glBegin(GL_LINES);
 	for (int i = 0; i < polyline.size(); i++) {
 		for (int j = 0; j < polyline[i].size(); j++) {
-			glColor3f(1, 0.5 + 0.1*i, 0.0);//colour added
+			glColor3f(1, 0.5 + 0.1*i, 1 - 0.1*i);//colour added
 			Point2f p = polyline[i][j].first;
 			Point2f n_p = polyline[i][j].second;
 			glVertex3f(p.x, p.y, i);
