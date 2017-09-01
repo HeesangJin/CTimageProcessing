@@ -16,15 +16,15 @@
 #include "opencv2/opencv.hpp"
 
 #define NUM_PLANES 150
-float EPSILON_D = 0.55;
+float EPSILON_D = 0.57;
 int EPSILON_D_BASE = 0;
 float EPSILON_J = -1;
 int EPSILON_J_BASE = 0;
 float EPSILON_I = 0.7;
 int EPSILON_I_BASE = 0;
 
-#define N_THETA 12
-#define N_Z 10
+#define N_THETA 8
+#define N_Z 6
 #define LENGTH_L 6
 
 #define VALUE_S 3
@@ -616,7 +616,7 @@ void makeBlobMat(cv::Mat &im, cv::Mat &im_with_keypoints){
 
     // Filter by Area.
     params.filterByArea = true;
-    params.minArea = 15;
+    params.minArea = 5;
     //params.maxArea = 1500;
 
     // Filter by Circularity
@@ -679,7 +679,6 @@ void makeIx(cv::Mat &matSubX, cv::Mat &matIx){
             else{
                 matIx.at<unsigned char>(iz,iy) = (unsigned char)255; //y, z. 0 by paper
             }
-
         }
     }
 }
@@ -750,12 +749,17 @@ void divideSubVolumeX(vector<cv::Mat> &matDir3d, vector<cv::Mat> &matSubX3d){
                 unsigned char diry = (int)matDir3d[iz].at<cv::Vec3f>(iy,ix)[1];
                 unsigned char dirz = (int)matDir3d[iz].at<cv::Vec3f>(iy,ix)[2];
 
-                if(diry > dirx || dirz > dirx) // dirx is biggest
-                    continue;
-
-                matSubX3d[ix].at<cv::Vec3b>(iz,iy)[0] =  dirx;
-                matSubX3d[ix].at<cv::Vec3b>(iz,iy)[1] =  diry;
-                matSubX3d[ix].at<cv::Vec3b>(iz,iy)[2] =  dirz;
+                // dirx is biggest
+                if(diry > dirx || dirz > dirx){
+                    matSubX3d[ix].at<cv::Vec3b>(iz,iy)[0] = 0;
+                    matSubX3d[ix].at<cv::Vec3b>(iz,iy)[1] = 0;
+                    matSubX3d[ix].at<cv::Vec3b>(iz,iy)[2] = 0;
+                } 
+                else{
+                    matSubX3d[ix].at<cv::Vec3b>(iz,iy)[0] =  dirx;
+                    matSubX3d[ix].at<cv::Vec3b>(iz,iy)[1] =  diry;
+                    matSubX3d[ix].at<cv::Vec3b>(iz,iy)[2] =  dirz;
+                }
             }
         }
         cout << "dividing.. " << ix << "/" << sx << endl;
@@ -763,217 +767,238 @@ void divideSubVolumeX(vector<cv::Mat> &matDir3d, vector<cv::Mat> &matSubX3d){
 }
 
 int main(int argc, const char * argv[]){
-    clock_t begin = clock();
-    
-//    //////////////////////////////////////////////////////// read VOL data
-//
-//    FILE    *fp_sour;
-//    unsigned char buff[48]; //48byte
-//    size_t   n_size;
-//
-//    fp_sour = fopen("./Pramook_black_velvet_3.03um_80kV_down.vol", "rb");
-//    n_size = fread(buff, 1, 48, fp_sour);
-//
-//    readHeader(buff);
-//
-//    vector<float> data((((long long)sx)*sy)*sz);
-//    readData(data, fp_sour);
-//
-//    //printData(data);
-//
-//    fclose(fp_sour);
-//
-//    ///////////////////////////////////////////////////////
-//
+
+    char inputType;
+    int inputPlane = -1;
+
+    // input valid check
+    if(argc != 2 && argc != 3){
+        
+        fprintf(stderr,"<TYPE> \n");
+        fprintf(stderr,"o: Original CT Image\n");
+        fprintf(stderr,"b: Binary CT Image\n");
+        fprintf(stderr,"s: skip Original, Binary CT Images\n");
+        fprintf(stderr,"Direction RGB Image, Cleaned CT Image are always printed\n");
+        fprintf(stderr,"<IMAGE_NUMBER> \n");
+        fprintf(stderr,"RGB, Cleand Image Number. (int)0 ~ Size of Z\n");
+        fprintf(stderr,"<Usage> \n");
+        fprintf(stderr,"./main TYPE IMAGE_NUMBER (ex: ./main b 100)\n");
+        return -1;
+    }
+    inputType = argv[1][0];
+    if(inputType != 'o' && inputType != 'b' && inputType != 's'){
+        fprintf(stderr,"<TYPE>\nmust be 'o', 'b', 's'\n");
+        fprintf(stderr,"<Usage> \n");
+        fprintf(stderr,"./main TYPE IMAGE_NUMBER (ex: ./main b 100)\n");
+        return -1;
+    }
+
+    //start processing timer
+    clock_t begin = clock(); 
+
+
+
+    // Step​ ​0.​ ​Reading​ ​3D-CT​ ​images
+
+    //////////////////////////////////////////////////////// read VOL data
+    FILE    *fp_sour;
+    unsigned char buff[48]; //48byte
+    size_t   n_size;
+
+    fp_sour = fopen("./Pramook_black_velvet_3.03um_80kV_down.vol", "rb");
+    n_size = fread(buff, 1, 48, fp_sour);
+    readHeader(buff);
+
+    // input valid check
+    if(argc == 3){
+        inputPlane = atoi(argv[2]);
+
+        if(sz <= inputPlane){
+            fprintf(stderr, "PLANE_NUMBER must be 0 ~ %d\n", sz-1 ); 
+            return -1;
+        }
+    }
+
+    vector<float> data((((long long)sx)*sy)*sz);
+    readData(data, fp_sour, 1);
+
+    fclose(fp_sour);
+    ///////////////////////////////////////////////////////
+
     string windowName = "Hello OpenCV";
-//    cv::Mat mat, matFx, matDir, matDensity ,matCT, matJ;
-//    
-//    
-//    vector<cv::Mat> mat3d, mat3dDir;
-//    vector<Direction> setOfDirections;
-//    vector<pair<float, float> > degreesByDirections;
-//    
-//    cout << "Start processing" << endl;
-//    
-//    
-//    calculSetOfDirections(setOfDirections, degreesByDirections);
-//
-//    //showAllDirections(degreesByDirections); //debug
-//    
-//    //rotateMatrix Test
-////    Direction originalPoint = {3, 3, 3};
-////    Direction rotatedPoint = rotateMatrix(originalPoint, 1.07, 'x');
-////    rotatedPoint = rotateMatrix(rotatedPoint, 1.07, 'y');
-////    cout << "x: "<<rotatedPoint.x << ", y: " << rotatedPoint.y << ", z: " << rotatedPoint.z << endl;
-////    
-////    return 0; //debug
-//    
-//    for(int curFileNum = 0; curFileNum < NUM_PLANES; curFileNum++){
-//        //read input image
-//        readNextInput(curFileNum, mat, data);
-//        
-//        mat3d.push_back(mat);
-//        
-//        //caculate f(x)
-//        matFx = cv::Mat(mat.rows, mat.cols, CV_32F, float(0));
-//        calculFx(mat, matFx);
-//        mat3dFx.push_back(matFx);
-//        //ok
-//        
-//        //DEBUG
-//        //        cv::Mat matTest;
-//        //        matTest = cv::Mat(matFx.rows, matFx.cols, CV_8UC3, cv::Scalar(0, 0, 0));
-//        //        debugToRgb(matFx, matTest);
-//        //
-//        
-//        cv::imshow(windowName, matFx);
-//        cv::createTrackbar("threahold D", windowName, &EPSILON_D_BASE, 100, changeEpsilonD, (void*)&mat);
-//        cv::setTrackbarPos("threahold D", windowName, 55);
-//        cv::waitKey(0);
-//    }
-//    //showAllFx(mat3dFx);
-//    
-//    calculAllQs(setOfDirections);
-//    ROWS = mat.rows;
-//    COLS = mat.cols;
-//    
-//    int curFileNum = 100;
-//    //    for(int curFileNum = 0; curFileNum < NUM_PLANES; curFileNum++){
-//    
-//    mat = mat3d[curFileNum];
-//    matFx = mat3dFx[curFileNum];
-//    cout << "curFileNum: " << curFileNum << endl;
-//    
-//    // make matirx of direction
-//    Point curPoint = {0, 0, curFileNum};
-//    matDir = cv::Mat(mat.rows, mat.cols, CV_8UC3, cv::Scalar(0, 0, 0));
-//    
-//    // make matrix of Final CT values
-//    matCT = cv::Mat(matFx.rows, matFx.cols, CV_32F, float(0));
-//    
-//    // make matrix of Maximum J value of each voxel
-//    matJ = cv::Mat(matFx.rows, matFx.cols, CV_32F, float(0));
-//    
-//    // Calculating Directions
-//    calculVoxelDirection(curPoint, mat, matFx, matDir, matJ, setOfDirections, degreesByDirections);
-//    makeFinalCTmatrix(mat, matFx, matJ, matCT);
-//    
-//    mat3dDir.push_back(matDir);
-//    mat3dCT.push_back(matCT);
-//    mat3dJ.push_back(matJ);
-//    
-//    //matDensity = cv::Mat(mat.rows,mat.cols, CV_32F, float(0));
-//    //makeDensityFromDir(matDir, matDensity);
-//    
-//    /* debug - draw lines in yellow */
-//    //drawRowLine(matDir, 100);
-////    drawColLine(matDir, 330); //left
-////    drawColLine(matDir, 370); //right
-////    drawRowLine(matDir, 585); //top
-////    drawRowLine(matDir, 625); //bottom
-////    //top-left is (0,0)
-////    
-////    drawDot(matDir, 350, 600);
-////    drawDot(matDir, 351, 600);
-////    drawDot(matDir, 352, 600);
-////    drawDot(matDir, 353, 600);
-////    drawDot(matDir, 354, 600);
-////    drawDot(matDir, 355, 600);
-////    drawDot(matDir, 356, 600);
-////    drawDot(matDir, 357, 600);
-////    drawDot(matDir, 358, 600);
-////    drawDot(matDir, 359, 600);
-////    drawDot(matDir, 360, 600);
-////    
-////    
-////    //debug
-////    showAllJvaluesDot(350, 600, curFileNum, setOfDirections);
-//    
-//    //drawColLine(matDir, 400);
-//    //drawSquare(matDir, 320, 580, 380, 630); // bottom (x,y) and top (x,y)
-//    
-//    //showSquareRGBvalue(matDir, 330, 585, 370, 625); // bottom (x,y) and top (x,y)
-//    
-//    //showDotRGBvalue(matDir, 350, 605); // not showDotRGBvalue(matDir, 605, 350);
-//    
+    cv::Mat mat, matFx, matDir, matDensity ,matCT, matJ;
+
+    vector<cv::Mat> mat3d, mat3dDir;
+    vector<Direction> setOfDirections;
+    vector<pair<float, float> > degreesByDirections;
+
+    cout << "Start processing" << endl;
+
+
+
+    // Step​ ​1.​ ​Determining​ ​Epsilon​ ​D
+
+    for(int curFileNum = 0; curFileNum < sz; curFileNum++){
+        // read input image from mat
+        readNextInput(curFileNum, mat, data);
+
+        // Print Original CT Image
+        if(inputType == 'o'){
+            if(inputPlane == -1){
+                printf("Current Original CT Image Number: %d \n", curFileNum);
+                cv::imshow(windowName, mat);
+                cv::waitKey(0);
+            }
+        }
+        mat3d.push_back(mat);
+
+        // caculate f(x)
+        matFx = cv::Mat(mat.rows, mat.cols, CV_32F, float(0));
+        calculFx(mat, matFx);
+        mat3dFx.push_back(matFx);
+
+        // Print Binary CT Image
+        if(inputType == 'b'){
+            if(inputPlane == -1){
+                printf("Current Binary CT Image Number: %d \n", curFileNum);
+                cv::imshow(windowName, matFx);
+                cv::createTrackbar("threahold D", windowName, &EPSILON_D_BASE, 100, changeEpsilonD, (void*)&mat);
+                cv::setTrackbarPos("threahold D", windowName, 55);
+                cv::waitKey(0);
+            }
+        }
+    }
+    // showAllFx(mat3dFx); // debug
+
+
+
+    // input valid check
+    if(argc == 2){
+        fprintf(stderr, "<Program End>\n");
+        fprintf(stderr, "If you print Direction(RGB) Image & Clenaed CT Image\n");
+        fprintf(stderr, "You should input IMAGE_NUMBER\n"); 
+        fprintf(stderr,"<Usage> \n");
+        fprintf(stderr,"./main TYPE IMAGE_NUMBER (ex: ./main b 100)\n");
+        return -1;
+    }
+
+
+    // Step​ ​2.​ ​Computing​ ​fiber​ ​direction​ ​Set
+    // (It takes a long time in this Step)
+
+    // 1) Getting set of directions
+    calculSetOfDirections(setOfDirections, degreesByDirections);
+    //showAllDirections(degreesByDirections); //debug
+
+    calculAllQs(setOfDirections);
+    ROWS = mat.rows;
+    COLS = mat.cols;
+
+    int curFileNum = inputPlane;
+    //    for(int curFileNum = 0; curFileNum < sz; curFileNum++){
+
+    mat = mat3d[curFileNum];
+    matFx = mat3dFx[curFileNum];
+    cout << "curFileNum: " << curFileNum << endl;
+
+    // make matirx of direction
+    Point curPoint = {0, 0, curFileNum};
+    matDir = cv::Mat(mat.rows, mat.cols, CV_8UC3, cv::Scalar(0, 0, 0));
+    // make matrix of Final CT values
+    matCT = cv::Mat(matFx.rows, matFx.cols, CV_32F, float(0));
+    // make matrix of Maximum J value of each voxel
+    matJ = cv::Mat(matFx.rows, matFx.cols, CV_32F, float(0));
+
+    // 2) Finding the J value
+    // 3) Determining the direction
+    calculVoxelDirection(curPoint, mat, matFx, matDir, matJ, setOfDirections, degreesByDirections);
+    makeFinalCTmatrix(mat, matFx, matJ, matCT);
+
+    mat3dDir.push_back(matDir);
+    mat3dCT.push_back(matCT);
+    mat3dJ.push_back(matJ);
+
+
+
+    // Density is needed?
+    // matDensity = cv::Mat(mat.rows,mat.cols, CV_32F, float(0));
+    // makeDensityFromDir(matDir, matDensity);
+
+
+
+    //end processing timer
     clock_t end = clock();
     double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
     cout << "Processing time: " << time_spent << "s" << endl;
+
+    // Print Direction RGB Image
+    cv::imshow(windowName, matDir);
+    cv::waitKey(0);
     
-    //=============== Track Bar
-    //트랙바를 생성하고 디폴트값으로 50지정
-    //createTrackbar("min threahold", windowName, &lowThreshold, 1, getThreshold );
-    //setTrackbarPos("min threahold", windowName, 0.55);
-    
-    //트랙바를 생성하고 디폴트값으로 150지정
-    
-    //createTrackbar("max threahold", windowName, &EPSILON_J, -1, onCircleSizeChange, (void*)&matDir);
-    //setTrackbarPos("max threahold", windowName, -10);
-    //=============== Track Bar
-    
-    // cv::imshow(windowName, matDir);
-    // cv::waitKey(0);
-    
-    // cv::Mat *mats[3] = {&mat, &matFx, &matJ};
-    // cv::imshow(windowName, matCT);
-    // cv::createTrackbar("threahold J", windowName, &EPSILON_J_BASE, 100, changeEpsilonJ, (void*)mats);
-    // cv::setTrackbarPos("threahold J", windowName, 5);
-    // cv::waitKey(0);
+
+
+    // Step 3. Determining Epsilon J
+    cv::Mat *mats[3] = {&mat, &matFx, &matJ};
+    // Print Cleaned CT Image
+    cv::imshow(windowName, matCT);
+    cv::createTrackbar("threahold J", windowName, &EPSILON_J_BASE, 100, changeEpsilonJ, (void*)mats);
+    cv::setTrackbarPos("threahold J", windowName, 5);
+    cv::waitKey(0);
     
     //    }
-    
-    // >>>>> Step2 <<<<<
+    // >>>>> The others Processing(Step4~6) are implemented by HJ<<<<<
+    // Github: 
+
     /////////////////////////////////////////////// read_VOL_CH3
-    FILE    *fp_sour2;
-    unsigned char buff2[48]; //48byte
-    size_t   n_size2;
+    // FILE    *fp_sour2;
+    // unsigned char buff2[48]; //48byte
+    // size_t   n_size2;
 
-    fp_sour2 = fopen("./3-2_dir_down.vol", "rb");
-    n_size2 = fread(buff2, 1, 48, fp_sour2);
+    // fp_sour2 = fopen("./3-2_dir_down.vol", "rb");
+    // n_size2 = fread(buff2, 1, 48, fp_sour2);
 
-    readHeader(buff2);
+    // readHeader(buff2);
 
-    vector<float> data3CH(((((long long)sx)*sy)*sz)*channels);
-    readData(data3CH, fp_sour2, channels);
-    //printData(data3CH);
+    // vector<float> data3CH(((((long long)sx)*sy)*sz)*channels);
+    // readData(data3CH, fp_sour2, channels);
+    // //printData(data3CH);
 
-    fclose(fp_sour2);
+    // fclose(fp_sour2);
     //////////////////////////////////////////////
 
     // vector<cv::Mat> matDir3d  from HN
-    vector<cv::Mat> matDir3d;
-    for (int curFileNum = 0; curFileNum < sz; curFileNum++) {
-        //  //read input image
-        cv::Mat matCH3;
-        readNextInputCH3(curFileNum, matCH3, data3CH);
-        //imshow("matCH3 image", matCH3);
-        //cv::waitKey(0);
-        matDir3d.push_back(matCH3);
-    }
+    // vector<cv::Mat> matDir3d;
+    // for (int curFileNum = 0; curFileNum < sz; curFileNum++) {
+    //     //  //read input image
+    //     cv::Mat matCH3;
+    //     readNextInputCH3(curFileNum, matCH3, data3CH);
+    //     //imshow("matCH3 image", matCH3);
+    //     //cv::waitKey(0);
+    //     matDir3d.push_back(matCH3);
+    // }
     //////////////////////////////////////////////
     
     // divide to 3sub Volumes
-    vector<cv::Mat> matIx3d, matSubX3d;
-    divideSubVolumeX(matDir3d, matSubX3d); // (dir -> subX)
+    // vector<cv::Mat> matIx3d, matSubX3d;
+    // divideSubVolumeX(matDir3d, matSubX3d); // (dir -> subX)
 
-    for(int i=0; i<(int)matSubX3d.size(); i++){
+    // for(int i=0; i<(int)matSubX3d.size(); i++){
 
-        cv::Mat IxplaneYZ = cv::Mat(sz, sy, CV_8UC1); // y(rows), z(planes)
+    //     cv::Mat IxplaneYZ = cv::Mat(sz, sy, CV_8UC1); // y(rows), z(planes)
         
-        makeIx(matSubX3d[i], IxplaneYZ); // (subX -> Ix)
-        matIx3d.push_back(IxplaneYZ);
-    }
+    //     makeIx(matSubX3d[i], IxplaneYZ); // (subX -> Ix)
+    //     matIx3d.push_back(IxplaneYZ);
+    // }
     
-    for(int i=0; i<(int)matIx3d.size(); i++){
-        cv::Mat im_with_keypoints;
-        cout << "current Image: X voxel " << i << endl;
-        makeBlobMat(matIx3d[i], im_with_keypoints); // (Ix -> blobs)
+    // for(int i=0; i<(int)matIx3d.size(); i++){
+    //     cv::Mat im_with_keypoints;
+    //     cout << "current Image: X voxel " << i << endl;
+    //     makeBlobMat(matIx3d[i], im_with_keypoints); // (Ix -> blobs)
         
-        // Show blobs
-        imshow(windowName, im_with_keypoints );
-        cv::createTrackbar("threahold I", windowName, &EPSILON_I_BASE, 10, changeEpsilonI, (void*)&matSubX3d[i]);
-        cv::waitKey(0);
-    }    
+    //     // Show blobs
+    //     imshow(windowName, im_with_keypoints );
+    //     cv::createTrackbar("threahold I", windowName, &EPSILON_I_BASE, 10, changeEpsilonI, (void*)&matSubX3d[i]);
+    //     cv::waitKey(0);
+    // }    
     return 0;
 }
-
